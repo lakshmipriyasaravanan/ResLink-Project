@@ -1,0 +1,10 @@
+{
+  "name": "reslink-backend",
+  "version": "1.0.0",
+  "description": "ResLink Backend REST API Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}
