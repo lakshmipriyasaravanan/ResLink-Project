@@ -25,7 +25,9 @@ import {
   FileText,
   Award,
   Database,
-  Calendar
+  Calendar,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { projectAPI, profileAPI } from '../services/api';
 
@@ -39,6 +41,10 @@ const ProjectDetails = () => {
   const [recommendations, setRecommendations] = useState([]);
   const [selectedResearcher, setSelectedResearcher] = useState(null);
   
+  // Delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Modal states for milestone creation
   const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
   const [milestoneForm, setMilestoneForm] = useState({
@@ -111,6 +117,22 @@ const ProjectDetails = () => {
       fetchProjectWorkspace();
     } catch (err) {
       setToast({ message: 'Failed to add milestone.', type: 'error' });
+    }
+  };
+
+  const handleDeleteProjectConfirmed = async () => {
+    setIsDeleting(true);
+    try {
+      await projectAPI.deleteProject(id);
+      setToast({ message: `Project "${project.title}" deleted completely.`, type: 'success' });
+      setIsDeleteModalOpen(false);
+      setTimeout(() => {
+        navigate('/projects');
+      }, 500);
+    } catch (err) {
+      setToast({ message: 'Failed to delete research project.', type: 'error' });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -188,6 +210,14 @@ const ProjectDetails = () => {
                   <Target className="h-4 w-4" />
                   <span>Skill Gap Analysis</span>
                 </Link>
+
+                <button
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 font-bold text-xs rounded-xl border border-rose-400/30 transition-all"
+                >
+                  <Trash2 className="h-4 w-4 text-rose-300" />
+                  <span>Delete Project</span>
+                </button>
               </div>
             </div>
           </div>
@@ -601,6 +631,44 @@ const ProjectDetails = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Confirmation Acknowledgment Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Delete Research Project"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 bg-rose-50 p-4 rounded-2xl border border-rose-100">
+            <AlertTriangle className="h-6 w-6 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-rose-900">Acknowledgement Required</h4>
+              <p className="text-xs text-rose-800 leading-relaxed">
+                Are you sure you want to delete <span className="font-bold text-slate-900">"{project?.title}"</span>?
+                This action will completely remove the project, team member assignments, milestones, and skill gap metrics from your dashboard.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button
+              onClick={() => setIsDeleteModalOpen(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteProjectConfirmed}
+              disabled={isDeleting}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>{isDeleting ? 'Deleting...' : 'Confirm & Delete Project'}</span>
+            </button>
+          </div>
+        </div>
       </Modal>
 
       <Toast

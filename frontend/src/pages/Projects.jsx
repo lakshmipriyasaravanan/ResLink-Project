@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import SkillBadge from '../components/SkillBadge';
+import Modal from '../components/Modal';
 import Toast from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -14,7 +15,9 @@ import {
   Sparkles, 
   Calendar, 
   ArrowRight,
-  Filter
+  Filter,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { projectAPI } from '../services/api';
 
@@ -24,6 +27,10 @@ const Projects = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ message: '', type: 'info' });
+
+  // Acknowledgment Modal state
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { setActiveProjectId } = useAuth();
   const navigate = useNavigate();
@@ -41,6 +48,22 @@ const Projects = () => {
       setToast({ message: 'Failed to load research projects.', type: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteProjectConfirmed = async () => {
+    if (!deleteConfirmTarget) return;
+
+    setIsDeleting(true);
+    try {
+      await projectAPI.deleteProject(deleteConfirmTarget.id);
+      setToast({ message: `Project "${deleteConfirmTarget.title}" deleted completely.`, type: 'success' });
+      setDeleteConfirmTarget(null);
+      fetchProjects();
+    } catch (err) {
+      setToast({ message: 'Failed to delete research project.', type: 'error' });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -151,7 +174,7 @@ const Projects = () => {
               {filteredProjects.map((project) => (
                 <div
                   key={project.id}
-                  className="bg-white rounded-3xl border border-brand-100/90 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between space-y-4 group"
+                  className="bg-white rounded-3xl border border-brand-100/90 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between space-y-4 group relative"
                 >
                   <div className="space-y-3">
                     {/* Status & Domain Header */}
@@ -159,9 +182,20 @@ const Projects = () => {
                       <span className="text-[11px] font-extrabold uppercase tracking-wider text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-100">
                         {project.domain}
                       </span>
-                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${getStatusStyle(project.status)}`}>
-                        {project.status}
-                      </span>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${getStatusStyle(project.status)}`}>
+                          {project.status}
+                        </span>
+
+                        <button
+                          onClick={() => setDeleteConfirmTarget(project)}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Delete Research Project"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Title & Description */}
@@ -216,6 +250,44 @@ const Projects = () => {
           )}
         </main>
       </div>
+
+      {/* Delete Confirmation Acknowledgment Modal */}
+      <Modal
+        isOpen={!!deleteConfirmTarget}
+        onClose={() => setDeleteConfirmTarget(null)}
+        title="Delete Research Project"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 bg-rose-50 p-4 rounded-2xl border border-rose-100">
+            <AlertTriangle className="h-6 w-6 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-rose-900">Acknowledgement Required</h4>
+              <p className="text-xs text-rose-800 leading-relaxed">
+                Are you sure you want to delete <span className="font-bold text-slate-900">"{deleteConfirmTarget?.title}"</span>?
+                This action will completely remove the project, team member assignments, milestones, and skill gap metrics from your dashboard.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button
+              onClick={() => setDeleteConfirmTarget(null)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteProjectConfirmed}
+              disabled={isDeleting}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>{isDeleting ? 'Deleting...' : 'Confirm & Delete Project'}</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Toast
         message={toast.message}
