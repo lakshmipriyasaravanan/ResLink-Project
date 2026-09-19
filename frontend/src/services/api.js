@@ -7,7 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 5000,
+  timeout: 4000,
 });
 
 api.interceptors.request.use(
@@ -21,8 +21,8 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Fallback Mock Datasets for seamless Vercel client-side execution
-let mockProjects = [
+// --- LocalStorage Persistence Helpers ---
+const initialProjects = [
   {
     id: 1,
     creator_id: 1,
@@ -89,7 +89,7 @@ let mockProjects = [
   },
 ];
 
-let mockRecommendations = [
+const initialRecommendations = [
   {
     id: 2,
     name: "Prof. Sarah Chen",
@@ -152,7 +152,7 @@ let mockRecommendations = [
   }
 ];
 
-let mockPublications = [
+const initialPublications = [
   {
     id: 1,
     project_id: 1,
@@ -164,7 +164,7 @@ let mockPublications = [
   }
 ];
 
-let mockPatents = [
+const initialPatents = [
   {
     id: 1,
     project_id: 1,
@@ -176,7 +176,7 @@ let mockPatents = [
   }
 ];
 
-let mockResources = [
+const initialResources = [
   {
     id: 1,
     name: "MIMIC-IV De-identified Clinical Dataset",
@@ -195,6 +195,48 @@ let mockResources = [
   }
 ];
 
+// Helper functions for reading/writing persistent data
+const getProjectsData = () => {
+  const data = localStorage.getItem('reslink_projects_store');
+  return data ? JSON.parse(data) : initialProjects;
+};
+const saveProjectsData = (projects) => {
+  localStorage.setItem('reslink_projects_store', JSON.stringify(projects));
+};
+
+const getPubsData = () => {
+  const data = localStorage.getItem('reslink_pubs_store');
+  return data ? JSON.parse(data) : initialPublications;
+};
+const savePubsData = (pubs) => {
+  localStorage.setItem('reslink_pubs_store', JSON.stringify(pubs));
+};
+
+const getPatentsData = () => {
+  const data = localStorage.getItem('reslink_patents_store');
+  return data ? JSON.parse(data) : initialPatents;
+};
+const savePatentsData = (patents) => {
+  localStorage.setItem('reslink_patents_store', JSON.stringify(patents));
+};
+
+const getResourcesData = () => {
+  const data = localStorage.getItem('reslink_resources_store');
+  return data ? JSON.parse(data) : initialResources;
+};
+const saveResourcesData = (resources) => {
+  localStorage.setItem('reslink_resources_store', JSON.stringify(resources));
+};
+
+const getProfileData = () => {
+  const data = localStorage.getItem('reslink_profile_store');
+  return data ? JSON.parse(data) : null;
+};
+const saveProfileData = (profile) => {
+  localStorage.setItem('reslink_profile_store', JSON.stringify(profile));
+};
+
+// API Services
 export const authAPI = {
   register: async (userData) => {
     try {
@@ -242,27 +284,33 @@ export const profileAPI = {
     try {
       return await api.get('/profiles/me');
     } catch {
-      return {
-        data: {
-          user_id: 1,
-          bio: "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics.",
-          interests: ["Artificial Intelligence", "Machine Learning", "NLP", "Deep Learning"],
-          experience: "12 years academic & industrial research in Deep Learning & Medical AI.",
-          expertise: "Neural Network Architectures, Transformers, PyTorch, Predictive Modeling",
-          skills: [
-            { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 5 },
-            { name: "Python", category: "Software Engineering", proficiency: 5 },
-            { name: "NLP", category: "Artificial Intelligence", proficiency: 4 },
-            { name: "Deep Learning", category: "Artificial Intelligence", proficiency: 5 },
-          ]
-        }
+      const stored = getProfileData();
+      if (stored) return { data: stored };
+
+      const defaultProf = {
+        user_id: 1,
+        bio: "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics.",
+        interests: ["Artificial Intelligence", "Machine Learning", "NLP", "Deep Learning"],
+        experience: "12 years academic & industrial research in Deep Learning & Medical AI.",
+        expertise: "Neural Network Architectures, Transformers, PyTorch, Predictive Modeling",
+        skills: [
+          { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 5 },
+          { name: "Python", category: "Software Engineering", proficiency: 5 },
+          { name: "NLP", category: "Artificial Intelligence", proficiency: 4 },
+          { name: "Deep Learning", category: "Artificial Intelligence", proficiency: 5 },
+        ]
       };
+      saveProfileData(defaultProf);
+      return { data: defaultProf };
     }
   },
   updateProfile: async (profileData) => {
     try {
-      return await api.put('/profiles/me', profileData);
+      const res = await api.put('/profiles/me', profileData);
+      saveProfileData(res.data);
+      return res;
     } catch {
+      saveProfileData(profileData);
       return { data: profileData };
     }
   },
@@ -270,14 +318,14 @@ export const profileAPI = {
     try {
       return await api.get('/profiles/all');
     } catch {
-      return { data: mockRecommendations };
+      return { data: initialRecommendations };
     }
   },
   getResearcherById: async (id) => {
     try {
       return await api.get(`/profiles/${id}`);
     } catch {
-      const found = mockRecommendations.find(r => r.id == id) || mockRecommendations[0];
+      const found = initialRecommendations.find(r => r.id == id) || initialRecommendations[0];
       return { data: found };
     }
   },
@@ -286,108 +334,144 @@ export const profileAPI = {
 export const projectAPI = {
   getProjects: async () => {
     try {
-      return await api.get('/projects');
+      const res = await api.get('/projects');
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        saveProjectsData(res.data);
+      }
+      return res;
     } catch {
-      return { data: mockProjects };
+      return { data: getProjectsData() };
     }
   },
   createProject: async (projectData) => {
+    const projects = getProjectsData();
+    const newProj = {
+      id: Date.now(),
+      creator_id: 1,
+      title: projectData.title,
+      description: projectData.description,
+      domain: projectData.domain || 'Artificial Intelligence',
+      status: projectData.status || 'Team Formation',
+      start_date: projectData.start_date,
+      end_date: projectData.end_date,
+      required_skills: projectData.required_skills || [],
+      team_members: [{ id: 1, name: 'Dr. Arun Kumar', role: 'Project Creator', affiliation: 'IIT Madras' }],
+      milestones: [],
+    };
+    projects.unshift(newProj);
+    saveProjectsData(projects);
+
     try {
-      return await api.post('/projects', projectData);
-    } catch {
-      const newProj = {
-        id: mockProjects.length + 1,
-        creator_id: 1,
-        title: projectData.title,
-        description: projectData.description,
-        domain: projectData.domain || 'Artificial Intelligence',
-        status: projectData.status || 'Team Formation',
-        start_date: projectData.start_date,
-        end_date: projectData.end_date,
-        required_skills: projectData.required_skills || [],
-        team_members: [{ id: 1, name: 'Dr. Arun Kumar', role: 'Project Creator', affiliation: 'IIT Madras' }],
-        milestones: [],
-      };
-      mockProjects.unshift(newProj);
-      return { data: newProj };
+      await api.post('/projects', projectData);
+    } catch (e) {
+      console.log('Saved project to persistent storage');
     }
+    return { data: newProj };
   },
   getProjectById: async (id) => {
+    const projects = getProjectsData();
+    const found = projects.find(p => p.id == id) || projects[0];
+
     try {
-      return await api.get(`/projects/${id}`);
+      const res = await api.get(`/projects/${id}`);
+      return res;
     } catch {
-      const found = mockProjects.find(p => p.id == id) || mockProjects[0];
       return {
         data: {
           ...found,
-          publications: mockPublications,
-          patents: mockPatents,
-          resources: mockResources,
+          publications: getPubsData().filter(p => !p.project_id || p.project_id == id),
+          patents: getPatentsData().filter(p => !p.project_id || p.project_id == id),
+          resources: getResourcesData().filter(r => r.domain === found?.domain || true),
         }
       };
     }
   },
   updateProject: async (id, projectData) => {
+    const projects = getProjectsData();
+    const updated = projects.map(p => p.id == id ? { ...p, ...projectData } : p);
+    saveProjectsData(updated);
+
     try {
-      return await api.put(`/projects/${id}`, projectData);
-    } catch {
-      return { data: projectData };
-    }
+      await api.put(`/projects/${id}`, projectData);
+    } catch (e) {}
+    return { data: projectData };
   },
   deleteProject: async (id) => {
+    const projects = getProjectsData().filter(p => p.id != id);
+    saveProjectsData(projects);
+
     try {
-      return await api.delete(`/projects/${id}`);
-    } catch {
-      mockProjects = mockProjects.filter(p => p.id != id);
-      return { data: { success: true } };
-    }
+      await api.delete(`/projects/${id}`);
+    } catch (e) {}
+    return { data: { success: true } };
   },
   
-  // Team
+  // Team Management
   addTeamMember: async (projectId, userId, role) => {
-    try {
-      return await api.post(`/projects/${projectId}/team`, { user_id: userId, role });
-    } catch {
-      const proj = mockProjects.find(p => p.id == projectId) || mockProjects[0];
-      const rec = mockRecommendations.find(r => r.id == userId) || { id: userId, name: "Collaborator", affiliation: "University" };
-      if (!proj.team_members.some(m => m.id == userId)) {
-        proj.team_members.push({
-          id: userId,
-          name: rec.name,
-          role: role || rec.role || "Collaborator",
-          affiliation: rec.affiliation,
-        });
-      }
-      return { data: proj };
+    const projects = getProjectsData();
+    const proj = projects.find(p => p.id == projectId) || projects[0];
+    const rec = initialRecommendations.find(r => r.id == userId) || { id: userId, name: "Collaborator", affiliation: "University" };
+    
+    if (proj && !proj.team_members.some(m => m.id == userId)) {
+      proj.team_members.push({
+        id: userId,
+        name: rec.name,
+        role: role || rec.role || "Collaborator",
+        affiliation: rec.affiliation,
+      });
+      saveProjectsData(projects);
     }
+
+    try {
+      await api.post(`/projects/${projectId}/team`, { user_id: userId, role });
+    } catch (e) {}
+    return { data: proj };
   },
+
   removeTeamMember: async (projectId, userId) => {
-    try {
-      return await api.delete(`/projects/${projectId}/team/${userId}`);
-    } catch {
-      const proj = mockProjects.find(p => p.id == projectId) || mockProjects[0];
+    const projects = getProjectsData();
+    const proj = projects.find(p => p.id == projectId) || projects[0];
+    if (proj) {
       proj.team_members = proj.team_members.filter(m => m.id != userId);
-      return { data: proj };
+      saveProjectsData(projects);
     }
+
+    try {
+      await api.delete(`/projects/${projectId}/team/${userId}`);
+    } catch (e) {}
+    return { data: proj };
   },
   
   // Milestones
   addMilestone: async (projectId, milestoneData) => {
-    try {
-      return await api.post(`/projects/${projectId}/milestones`, milestoneData);
-    } catch {
-      const proj = mockProjects.find(p => p.id == projectId) || mockProjects[0];
-      const newMs = { id: Date.now(), ...milestoneData };
+    const projects = getProjectsData();
+    const proj = projects.find(p => p.id == projectId) || projects[0];
+    const newMs = { id: Date.now(), ...milestoneData };
+    if (proj) {
+      if (!proj.milestones) proj.milestones = [];
       proj.milestones.push(newMs);
-      return { data: newMs };
+      saveProjectsData(projects);
     }
-  },
-  updateMilestone: async (milestoneId, milestoneData) => {
+
     try {
-      return await api.put(`/milestones/${milestoneId}`, milestoneData);
-    } catch {
-      return { data: milestoneData };
-    }
+      await api.post(`/projects/${projectId}/milestones`, milestoneData);
+    } catch (e) {}
+    return { data: newMs };
+  },
+
+  updateMilestone: async (milestoneId, milestoneData) => {
+    const projects = getProjectsData();
+    projects.forEach(p => {
+      if (p.milestones) {
+        p.milestones = p.milestones.map(m => m.id == milestoneId ? { ...m, ...milestoneData } : m);
+      }
+    });
+    saveProjectsData(projects);
+
+    try {
+      await api.put(`/milestones/${milestoneId}`, milestoneData);
+    } catch (e) {}
+    return { data: milestoneData };
   },
   
   // AI Recommendations & Skill Gap
@@ -395,46 +479,48 @@ export const projectAPI = {
     try {
       return await api.post(`/projects/${projectId}/recommendations`, { missing_skills_only: missingSkillsOnly });
     } catch {
-      return { data: mockRecommendations };
+      return { data: initialRecommendations };
     }
   },
   getSkillGap: async (projectId) => {
+    const projects = getProjectsData();
+    const proj = projects.find(p => p.id == projectId) || projects[0];
+    const teamSkills = new Set();
+    
+    (proj.team_members || []).forEach(m => {
+      if (m.id === 1) {
+        teamSkills.add('machine learning');
+        teamSkills.add('python');
+        teamSkills.add('nlp');
+      } else if (m.id === 2) {
+        teamSkills.add('nlp');
+        teamSkills.add('python');
+        teamSkills.add('data science');
+      } else if (m.id === 3) {
+        teamSkills.add('cloud computing');
+        teamSkills.add('python');
+      }
+    });
+
+    const covered = [];
+    const missing = [];
+
+    (proj.required_skills || []).forEach(s => {
+      const sName = (s.name || s).toLowerCase();
+      if (teamSkills.has(sName)) {
+        covered.push(s.name || s);
+      } else {
+        missing.push(s.name || s);
+      }
+    });
+
+    const total = (proj.required_skills || []).length || 1;
+    const covPct = Math.round((covered.length / total) * 100);
+    const gapPct = 100 - covPct;
+
     try {
       return await api.get(`/projects/${projectId}/skill-gap`);
     } catch {
-      const proj = mockProjects.find(p => p.id == projectId) || mockProjects[0];
-      const teamSkills = new Set();
-      proj.team_members.forEach(m => {
-        if (m.id === 1) {
-          teamSkills.add('machine learning');
-          teamSkills.add('python');
-          teamSkills.add('nlp');
-        } else if (m.id === 2) {
-          teamSkills.add('nlp');
-          teamSkills.add('python');
-          teamSkills.add('data science');
-        } else if (m.id === 3) {
-          teamSkills.add('cloud computing');
-          teamSkills.add('python');
-        }
-      });
-
-      const covered = [];
-      const missing = [];
-
-      (proj.required_skills || []).forEach(s => {
-        const sName = (s.name || s).toLowerCase();
-        if (teamSkills.has(sName)) {
-          covered.push(s.name || s);
-        } else {
-          missing.push(s.name || s);
-        }
-      });
-
-      const total = (proj.required_skills || []).length || 1;
-      const covPct = Math.round((covered.length / total) * 100);
-      const gapPct = 100 - covPct;
-
       return {
         data: {
           project_id: projectId,
@@ -456,32 +542,37 @@ export const publicationAPI = {
     try {
       return await api.get('/publications', { params: { project_id: projectId } });
     } catch {
-      return { data: mockPublications };
+      return { data: getPubsData() };
     }
   },
   createPublication: async (pubData) => {
+    const pubs = getPubsData();
+    const newPub = { id: Date.now(), ...pubData };
+    pubs.unshift(newPub);
+    savePubsData(pubs);
+
     try {
-      return await api.post('/publications', pubData);
-    } catch {
-      const newPub = { id: Date.now(), ...pubData };
-      mockPublications.unshift(newPub);
-      return { data: newPub };
-    }
+      await api.post('/publications', pubData);
+    } catch (e) {}
+    return { data: newPub };
   },
   updatePublication: async (id, pubData) => {
+    const pubs = getPubsData().map(p => p.id == id ? { ...p, ...pubData } : p);
+    savePubsData(pubs);
+
     try {
-      return await api.put(`/publications/${id}`, pubData);
-    } catch {
-      return { data: pubData };
-    }
+      await api.put(`/publications/${id}`, pubData);
+    } catch (e) {}
+    return { data: pubData };
   },
   deletePublication: async (id) => {
+    const pubs = getPubsData().filter(p => p.id != id);
+    savePubsData(pubs);
+
     try {
-      return await api.delete(`/publications/${id}`);
-    } catch {
-      mockPublications = mockPublications.filter(p => p.id != id);
-      return { data: { success: true } };
-    }
+      await api.delete(`/publications/${id}`);
+    } catch (e) {}
+    return { data: { success: true } };
   },
 };
 
@@ -490,32 +581,37 @@ export const patentAPI = {
     try {
       return await api.get('/patents', { params: { project_id: projectId } });
     } catch {
-      return { data: mockPatents };
+      return { data: getPatentsData() };
     }
   },
   createPatent: async (patentData) => {
+    const patents = getPatentsData();
+    const newPat = { id: Date.now(), ...patentData };
+    patents.unshift(newPat);
+    savePatentsData(patents);
+
     try {
-      return await api.post('/patents', patentData);
-    } catch {
-      const newPat = { id: Date.now(), ...patentData };
-      mockPatents.unshift(newPat);
-      return { data: newPat };
-    }
+      await api.post('/patents', patentData);
+    } catch (e) {}
+    return { data: newPat };
   },
   updatePatent: async (id, patentData) => {
+    const patents = getPatentsData().map(p => p.id == id ? { ...p, ...patentData } : p);
+    savePatentsData(patents);
+
     try {
-      return await api.put(`/patents/${id}`, patentData);
-    } catch {
-      return { data: patentData };
-    }
+      await api.put(`/patents/${id}`, patentData);
+    } catch (e) {}
+    return { data: patentData };
   },
   deletePatent: async (id) => {
+    const patents = getPatentsData().filter(p => p.id != id);
+    savePatentsData(patents);
+
     try {
-      return await api.delete(`/patents/${id}`);
-    } catch {
-      mockPatents = mockPatents.filter(p => p.id != id);
-      return { data: { success: true } };
-    }
+      await api.delete(`/patents/${id}`);
+    } catch (e) {}
+    return { data: { success: true } };
   },
 };
 
@@ -524,7 +620,7 @@ export const resourceAPI = {
     try {
       return await api.get('/resources', { params: { search, type, domain } });
     } catch {
-      let filtered = mockResources;
+      let filtered = getResourcesData();
       if (search) {
         filtered = filtered.filter(r => r.name.toLowerCase().includes(search.toLowerCase()) || r.domain.toLowerCase().includes(search.toLowerCase()));
       }
@@ -535,28 +631,33 @@ export const resourceAPI = {
     }
   },
   createResource: async (resData) => {
+    const resources = getResourcesData();
+    const newRes = { id: Date.now(), ...resData };
+    resources.unshift(newRes);
+    saveResourcesData(resources);
+
     try {
-      return await api.post('/resources', resData);
-    } catch {
-      const newRes = { id: Date.now(), ...resData };
-      mockResources.unshift(newRes);
-      return { data: newRes };
-    }
+      await api.post('/resources', resData);
+    } catch (e) {}
+    return { data: newRes };
   },
   updateResource: async (id, resData) => {
+    const resources = getResourcesData().map(r => r.id == id ? { ...r, ...resData } : r);
+    saveResourcesData(resources);
+
     try {
-      return await api.put(`/resources/${id}`, resData);
-    } catch {
-      return { data: resData };
-    }
+      await api.put(`/resources/${id}`, resData);
+    } catch (e) {}
+    return { data: resData };
   },
   deleteResource: async (id) => {
+    const resources = getResourcesData().filter(r => r.id != id);
+    saveResourcesData(resources);
+
     try {
-      return await api.delete(`/resources/${id}`);
-    } catch {
-      mockResources = mockResources.filter(r => r.id != id);
-      return { data: { success: true } };
-    }
+      await api.delete(`/resources/${id}`);
+    } catch (e) {}
+    return { data: { success: true } };
   },
 };
 
