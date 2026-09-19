@@ -404,9 +404,36 @@ const server = http.createServer(async (req, res) => {
       return sendJson(200, { token: `reslink_jwt_token_${newId}`, user: newUser });
     }
 
-    if (pathname === '/api/auth/login' && method === 'POST') {
+    if ((pathname === '/api/auth/login' || pathname === '/auth/login' || pathname === '/api/auth/login/') && method === 'POST') {
       const body = await getJsonBody(req);
-      const user = users.find(u => u.email === body.email);
+      const inputEmail = (body.email || '').toLowerCase().trim();
+      let user = users.find(u => u.email.toLowerCase().trim() === inputEmail);
+      
+      // Fallback: If user not found, create a demo user account on the fly
+      if (!user && inputEmail) {
+        const newId = users.length + 1;
+        user = {
+          id: newId,
+          name: inputEmail.split('@')[0].replace('.', ' ').toUpperCase(),
+          email: inputEmail,
+          password: body.password || 'password123',
+          role: 'Student Researcher',
+          affiliation: 'Stanford University',
+        };
+        users.push(user);
+        profiles[newId] = {
+          user_id: newId,
+          bio: 'Research scholar exploring AI and Machine Learning.',
+          interests: ['Artificial Intelligence', 'Machine Learning', 'Data Science'],
+          experience: 'Academic & Lab research experience.',
+          expertise: 'Python, PyTorch, Machine Learning',
+          skills: [
+            { name: 'Machine Learning', category: 'Artificial Intelligence', proficiency: 4 },
+            { name: 'Python', category: 'Software Engineering', proficiency: 4 },
+          ],
+        };
+      }
+
       if (user) {
         return sendJson(200, { token: `reslink_jwt_token_${user.id}`, user });
       } else {
