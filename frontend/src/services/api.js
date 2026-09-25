@@ -274,28 +274,64 @@ const getCurrentUserFromStorage = () => {
   }
 };
 
-const getProjectsData = () => {
-  const data = localStorage.getItem('reslink_projects_store');
-  return data ? JSON.parse(data) : initialProjects;
-};
-const saveProjectsData = (projects) => {
-  localStorage.setItem('reslink_projects_store', JSON.stringify(projects));
-};
-
-const getPubsData = () => {
-  const data = localStorage.getItem('reslink_pubs_store');
-  return data ? JSON.parse(data) : initialPublications;
-};
-const savePubsData = (pubs) => {
-  localStorage.setItem('reslink_pubs_store', JSON.stringify(pubs));
+const isNewUser = (user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  if (!curUser) return false;
+  // User is new if registered freshly or id > 2 and email is not arun/sarah
+  const email = (curUser.email || '').toLowerCase();
+  const isDemo = email.includes('arun') || email.includes('sarah') || curUser.id === 1 || curUser.id === 2;
+  return !isDemo;
 };
 
-const getPatentsData = () => {
-  const data = localStorage.getItem('reslink_patents_store');
-  return data ? JSON.parse(data) : initialPatents;
+const getProjectsData = (user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  const userIsNew = isNewUser(curUser);
+  const key = userIsNew ? `reslink_user_projects_${curUser?.id}` : 'reslink_projects_store';
+  const data = localStorage.getItem(key);
+  
+  if (data) return JSON.parse(data);
+  return userIsNew ? [] : initialProjects;
 };
-const savePatentsData = (patents) => {
-  localStorage.setItem('reslink_patents_store', JSON.stringify(patents));
+
+const saveProjectsData = (projects, user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  const userIsNew = isNewUser(curUser);
+  const key = userIsNew ? `reslink_user_projects_${curUser?.id}` : 'reslink_projects_store';
+  localStorage.setItem(key, JSON.stringify(projects));
+};
+
+const getPubsData = (user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  const userIsNew = isNewUser(curUser);
+  const key = userIsNew ? `reslink_user_pubs_${curUser?.id}` : 'reslink_pubs_store';
+  const data = localStorage.getItem(key);
+  
+  if (data) return JSON.parse(data);
+  return userIsNew ? [] : initialPublications;
+};
+
+const savePubsData = (pubs, user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  const userIsNew = isNewUser(curUser);
+  const key = userIsNew ? `reslink_user_pubs_${curUser?.id}` : 'reslink_pubs_store';
+  localStorage.setItem(key, JSON.stringify(pubs));
+};
+
+const getPatentsData = (user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  const userIsNew = isNewUser(curUser);
+  const key = userIsNew ? `reslink_user_patents_${curUser?.id}` : 'reslink_patents_store';
+  const data = localStorage.getItem(key);
+  
+  if (data) return JSON.parse(data);
+  return userIsNew ? [] : initialPatents;
+};
+
+const savePatentsData = (patents, user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  const userIsNew = isNewUser(curUser);
+  const key = userIsNew ? `reslink_user_patents_${curUser?.id}` : 'reslink_patents_store';
+  localStorage.setItem(key, JSON.stringify(patents));
 };
 
 const getResourcesData = () => {
@@ -308,16 +344,14 @@ const saveResourcesData = (resources) => {
 
 const getProfileData = (user) => {
   const curUser = user || getCurrentUserFromStorage();
-  const isSarah = curUser?.email?.toLowerCase().includes('sarah') || curUser?.id === 2;
-  const key = isSarah ? 'reslink_profile_store_2' : 'reslink_profile_store_' + (curUser?.id || 1);
+  const key = 'reslink_profile_store_' + (curUser?.id || 1);
   const data = localStorage.getItem(key);
   return data ? JSON.parse(data) : null;
 };
 
 const saveProfileData = (profile, user) => {
   const curUser = user || getCurrentUserFromStorage();
-  const isSarah = curUser?.email?.toLowerCase().includes('sarah') || curUser?.id === 2 || profile?.user_id === 2;
-  const key = isSarah ? 'reslink_profile_store_2' : 'reslink_profile_store_' + (curUser?.id || profile?.user_id || 1);
+  const key = 'reslink_profile_store_' + (curUser?.id || profile?.user_id || 1);
   localStorage.setItem(key, JSON.stringify(profile));
 };
 
@@ -327,16 +361,19 @@ export const authAPI = {
     try {
       return await api.post('/auth/register', userData);
     } catch {
+      const newId = Date.now();
+      const newUserObj = {
+        id: newId,
+        name: userData.name || 'New Researcher',
+        email: userData.email,
+        role: userData.role || 'Student Researcher',
+        affiliation: userData.affiliation || 'University',
+        is_new_user: true,
+      };
       return {
         data: {
-          token: `reslink_jwt_token_${Date.now()}`,
-          user: {
-            id: Date.now(),
-            name: userData.name || 'New Researcher',
-            email: userData.email,
-            role: userData.role || 'Student Researcher',
-            affiliation: userData.affiliation || 'University',
-          }
+          token: `reslink_jwt_token_${newId}`,
+          user: newUserObj
         }
       };
     }
@@ -347,13 +384,36 @@ export const authAPI = {
     } catch {
       const email = (credentials.email || '').toLowerCase();
       const isSarah = email.includes('sarah');
-      const demoUser = {
-        id: isSarah ? 2 : 1,
-        name: isSarah ? 'Prof. Sarah Chen' : 'Dr. Arun Kumar',
-        email: credentials.email,
-        role: isSarah ? 'Research Scholar' : 'Faculty Member',
-        affiliation: isSarah ? 'Stanford University - AI Lab' : 'IIT Madras - Department of CSE',
-      };
+      const isArun = email.includes('arun');
+      
+      let demoUser;
+      if (isSarah) {
+        demoUser = {
+          id: 2,
+          name: 'Prof. Sarah Chen',
+          email: credentials.email,
+          role: 'Research Scholar',
+          affiliation: 'Stanford University - AI Lab',
+        };
+      } else if (isArun) {
+        demoUser = {
+          id: 1,
+          name: 'Dr. Arun Kumar',
+          email: credentials.email,
+          role: 'Faculty Member',
+          affiliation: 'IIT Madras - Department of CSE',
+        };
+      } else {
+        demoUser = {
+          id: Date.now(),
+          name: credentials.email.split('@')[0].toUpperCase(),
+          email: credentials.email,
+          role: 'Student Researcher',
+          affiliation: 'Stanford University',
+          is_new_user: true,
+        };
+      }
+
       return {
         data: {
           token: `reslink_jwt_token_${demoUser.id}`,
@@ -374,39 +434,58 @@ export const profileAPI = {
       if (stored) return { data: stored };
 
       const isSarah = curUser?.email?.toLowerCase().includes('sarah') || curUser?.id === 2;
+      const isArun = curUser?.email?.toLowerCase().includes('arun') || curUser?.id === 1;
 
-      const profileObj = isSarah ? {
-        user_id: 2,
-        name: "Prof. Sarah Chen",
-        role: "Research Scholar",
-        affiliation: "Stanford University - AI Lab",
-        bio: "Postdoctoral researcher focused on Large Language Models, semantic text embeddings, and multilingual NLP benchmark evaluation across low-resource languages.",
-        interests: ["Natural Language Processing", "Transformers", "Data Science", "Machine Learning"],
-        experience: "6 years post-grad research on LLM alignment, RAG pipelines, and tokenization benchmarks.",
-        expertise: "HuggingFace, BERT, LLaMA fine-tuning, PyTorch, Vector DBs, Prompt Engineering",
-        skills: [
-          { name: "NLP", category: "Artificial Intelligence", proficiency: 5 },
-          { name: "Python", category: "Software Engineering", proficiency: 5 },
-          { name: "Data Science", category: "Data Science", proficiency: 4 },
-          { name: "Transformers", category: "Artificial Intelligence", proficiency: 5 },
-          { name: "LLM Fine-tuning", category: "Artificial Intelligence", proficiency: 5 },
-        ]
-      } : {
-        user_id: 1,
-        name: "Dr. Arun Kumar",
-        role: "Faculty Member",
-        affiliation: "IIT Madras - Department of CSE",
-        bio: "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics. Published over 40+ journal articles.",
-        interests: ["Artificial Intelligence", "Machine Learning", "NLP", "Deep Learning"],
-        experience: "12 years academic & industrial research in Deep Learning & Medical AI.",
-        expertise: "Neural Network Architectures, Transformers, PyTorch, Predictive Modeling",
-        skills: [
-          { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 5 },
-          { name: "Python", category: "Software Engineering", proficiency: 5 },
-          { name: "NLP", category: "Artificial Intelligence", proficiency: 4 },
-          { name: "Deep Learning", category: "Artificial Intelligence", proficiency: 5 },
-        ]
-      };
+      let profileObj;
+      if (isSarah) {
+        profileObj = {
+          user_id: 2,
+          name: "Prof. Sarah Chen",
+          role: "Research Scholar",
+          affiliation: "Stanford University - AI Lab",
+          bio: "Postdoctoral researcher focused on Large Language Models, semantic text embeddings, and multilingual NLP benchmark evaluation across low-resource languages.",
+          interests: ["Natural Language Processing", "Transformers", "Data Science", "Machine Learning"],
+          experience: "6 years post-grad research on LLM alignment, RAG pipelines, and tokenization benchmarks.",
+          expertise: "HuggingFace, BERT, LLaMA fine-tuning, PyTorch, Vector DBs, Prompt Engineering",
+          skills: [
+            { name: "NLP", category: "Artificial Intelligence", proficiency: 5 },
+            { name: "Python", category: "Software Engineering", proficiency: 5 },
+            { name: "Data Science", category: "Data Science", proficiency: 4 },
+            { name: "Transformers", category: "Artificial Intelligence", proficiency: 5 },
+            { name: "LLM Fine-tuning", category: "Artificial Intelligence", proficiency: 5 },
+          ]
+        };
+      } else if (isArun) {
+        profileObj = {
+          user_id: 1,
+          name: "Dr. Arun Kumar",
+          role: "Faculty Member",
+          affiliation: "IIT Madras - Department of CSE",
+          bio: "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics. Published over 40+ journal articles.",
+          interests: ["Artificial Intelligence", "Machine Learning", "NLP", "Deep Learning"],
+          experience: "12 years academic & industrial research in Deep Learning & Medical AI.",
+          expertise: "Neural Network Architectures, Transformers, PyTorch, Predictive Modeling",
+          skills: [
+            { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 5 },
+            { name: "Python", category: "Software Engineering", proficiency: 5 },
+            { name: "NLP", category: "Artificial Intelligence", proficiency: 4 },
+            { name: "Deep Learning", category: "Artificial Intelligence", proficiency: 5 },
+          ]
+        };
+      } else {
+        // Fresh empty profile for newly registered users
+        profileObj = {
+          user_id: curUser?.id || Date.now(),
+          name: curUser?.name || "New Researcher",
+          role: curUser?.role || "Student Researcher",
+          affiliation: curUser?.affiliation || "University",
+          bio: "",
+          interests: [],
+          experience: "",
+          expertise: "",
+          skills: [],
+        };
+      }
 
       saveProfileData(profileObj, curUser);
       return { data: profileObj };
@@ -453,10 +532,10 @@ export const projectAPI = {
   },
   createProject: async (projectData) => {
     const curUser = getCurrentUserFromStorage();
-    const projects = getProjectsData();
+    const projects = getProjectsData(curUser);
     const newProj = {
       id: Date.now(),
-      creator_id: curUser?.id || 1,
+      creator_id: curUser?.id || Date.now(),
       title: projectData.title,
       description: projectData.description,
       domain: projectData.domain || 'Artificial Intelligence',
@@ -465,15 +544,15 @@ export const projectAPI = {
       end_date: projectData.end_date,
       required_skills: projectData.required_skills || [],
       team_members: [{ 
-        id: curUser?.id || 1, 
-        name: curUser?.name || 'Dr. Arun Kumar', 
+        id: curUser?.id || Date.now(), 
+        name: curUser?.name || 'Researcher', 
         role: curUser?.role || 'Project Creator', 
         affiliation: curUser?.affiliation || 'University' 
       }],
       milestones: [],
     };
     projects.unshift(newProj);
-    saveProjectsData(projects);
+    saveProjectsData(projects, curUser);
 
     try {
       await api.post('/projects', projectData);
@@ -481,27 +560,32 @@ export const projectAPI = {
     return { data: newProj };
   },
   getProjectById: async (id) => {
-    const projects = getProjectsData();
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser);
     const found = projects.find(p => p.id == id) || projects[0];
 
     try {
       const res = await api.get(`/projects/${id}`);
       return res;
     } catch {
+      if (!found) {
+        return { data: null };
+      }
       return {
         data: {
           ...found,
-          publications: getPubsData().filter(p => !p.project_id || p.project_id == id),
-          patents: getPatentsData().filter(p => !p.project_id || p.project_id == id),
+          publications: getPubsData(curUser).filter(p => !p.project_id || p.project_id == id),
+          patents: getPatentsData(curUser).filter(p => !p.project_id || p.project_id == id),
           resources: getResourcesData().filter(r => r.domain === found?.domain || true),
         }
       };
     }
   },
   updateProject: async (id, projectData) => {
-    const projects = getProjectsData();
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser);
     const updated = projects.map(p => p.id == id ? { ...p, ...projectData } : p);
-    saveProjectsData(updated);
+    saveProjectsData(updated, curUser);
 
     try {
       await api.put(`/projects/${id}`, projectData);
@@ -509,8 +593,9 @@ export const projectAPI = {
     return { data: projectData };
   },
   deleteProject: async (id) => {
-    const projects = getProjectsData().filter(p => p.id != id);
-    saveProjectsData(projects);
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser).filter(p => p.id != id);
+    saveProjectsData(projects, curUser);
 
     try {
       await api.delete(`/projects/${id}`);
@@ -520,7 +605,8 @@ export const projectAPI = {
   
   // Team Management
   addTeamMember: async (projectId, userId, role) => {
-    const projects = getProjectsData();
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser);
     const proj = projects.find(p => p.id == projectId) || projects[0];
     const pool = [...arunRecommendations, ...sarahRecommendations];
     const rec = pool.find(r => r.id == userId) || { id: userId, name: "Collaborator", affiliation: "University" };
@@ -532,7 +618,7 @@ export const projectAPI = {
         role: role || rec.role || "Collaborator",
         affiliation: rec.affiliation,
       });
-      saveProjectsData(projects);
+      saveProjectsData(projects, curUser);
     }
 
     try {
@@ -542,11 +628,12 @@ export const projectAPI = {
   },
 
   removeTeamMember: async (projectId, userId) => {
-    const projects = getProjectsData();
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser);
     const proj = projects.find(p => p.id == projectId) || projects[0];
     if (proj) {
       proj.team_members = proj.team_members.filter(m => m.id != userId);
-      saveProjectsData(projects);
+      saveProjectsData(projects, curUser);
     }
 
     try {
@@ -557,13 +644,14 @@ export const projectAPI = {
   
   // Milestones
   addMilestone: async (projectId, milestoneData) => {
-    const projects = getProjectsData();
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser);
     const proj = projects.find(p => p.id == projectId) || projects[0];
     const newMs = { id: Date.now(), ...milestoneData };
     if (proj) {
       if (!proj.milestones) proj.milestones = [];
       proj.milestones.push(newMs);
-      saveProjectsData(projects);
+      saveProjectsData(projects, curUser);
     }
 
     try {
@@ -573,13 +661,14 @@ export const projectAPI = {
   },
 
   updateMilestone: async (milestoneId, milestoneData) => {
-    const projects = getProjectsData();
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser);
     projects.forEach(p => {
       if (p.milestones) {
         p.milestones = p.milestones.map(m => m.id == milestoneId ? { ...m, ...milestoneData } : m);
       }
     });
-    saveProjectsData(projects);
+    saveProjectsData(projects, curUser);
 
     try {
       await api.put(`/milestones/${milestoneId}`, milestoneData);
@@ -598,8 +687,24 @@ export const projectAPI = {
     }
   },
   getSkillGap: async (projectId) => {
-    const projects = getProjectsData();
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser);
     const proj = projects.find(p => p.id == projectId) || projects[0];
+    if (!proj) {
+      return {
+        data: {
+          project_id: projectId,
+          total_required: 0,
+          covered_count: 0,
+          missing_count: 0,
+          covered_skills: [],
+          missing_skills: [],
+          coverage_percentage: 100,
+          gap_percentage: 0,
+        }
+      };
+    }
+
     const teamSkills = new Set();
     
     (proj.team_members || []).forEach(m => {
@@ -659,14 +764,16 @@ export const publicationAPI = {
     try {
       return await api.get('/publications', { params: { project_id: projectId } });
     } catch {
-      return { data: getPubsData() };
+      const curUser = getCurrentUserFromStorage();
+      return { data: getPubsData(curUser) };
     }
   },
   createPublication: async (pubData) => {
-    const pubs = getPubsData();
+    const curUser = getCurrentUserFromStorage();
+    const pubs = getPubsData(curUser);
     const newPub = { id: Date.now(), ...pubData };
     pubs.unshift(newPub);
-    savePubsData(pubs);
+    savePubsData(pubs, curUser);
 
     try {
       await api.post('/publications', pubData);
@@ -674,8 +781,9 @@ export const publicationAPI = {
     return { data: newPub };
   },
   updatePublication: async (id, pubData) => {
-    const pubs = getPubsData().map(p => p.id == id ? { ...p, ...pubData } : p);
-    savePubsData(pubs);
+    const curUser = getCurrentUserFromStorage();
+    const pubs = getPubsData(curUser).map(p => p.id == id ? { ...p, ...pubData } : p);
+    savePubsData(pubs, curUser);
 
     try {
       await api.put(`/publications/${id}`, pubData);
@@ -683,8 +791,9 @@ export const publicationAPI = {
     return { data: pubData };
   },
   deletePublication: async (id) => {
-    const pubs = getPubsData().filter(p => p.id != id);
-    savePubsData(pubs);
+    const curUser = getCurrentUserFromStorage();
+    const pubs = getPubsData(curUser).filter(p => p.id != id);
+    savePubsData(pubs, curUser);
 
     try {
       await api.delete(`/publications/${id}`);
@@ -698,14 +807,16 @@ export const patentAPI = {
     try {
       return await api.get('/patents', { params: { project_id: projectId } });
     } catch {
-      return { data: getPatentsData() };
+      const curUser = getCurrentUserFromStorage();
+      return { data: getPatentsData(curUser) };
     }
   },
   createPatent: async (patentData) => {
-    const patents = getPatentsData();
+    const curUser = getCurrentUserFromStorage();
+    const patents = getPatentsData(curUser);
     const newPat = { id: Date.now(), ...patentData };
     patents.unshift(newPat);
-    savePatentsData(patents);
+    savePatentsData(patents, curUser);
 
     try {
       await api.post('/patents', patentData);
@@ -713,8 +824,9 @@ export const patentAPI = {
     return { data: newPat };
   },
   updatePatent: async (id, patentData) => {
-    const patents = getPatentsData().map(p => p.id == id ? { ...p, ...patentData } : p);
-    savePatentsData(patents);
+    const curUser = getCurrentUserFromStorage();
+    const patents = getPatentsData(curUser).map(p => p.id == id ? { ...p, ...patentData } : p);
+    savePatentsData(patents, curUser);
 
     try {
       await api.put(`/patents/${id}`, patentData);
@@ -722,8 +834,9 @@ export const patentAPI = {
     return { data: patentData };
   },
   deletePatent: async (id) => {
-    const patents = getPatentsData().filter(p => p.id != id);
-    savePatentsData(patents);
+    const curUser = getCurrentUserFromStorage();
+    const patents = getPatentsData(curUser).filter(p => p.id != id);
+    savePatentsData(patents, curUser);
 
     try {
       await api.delete(`/patents/${id}`);
