@@ -71,6 +71,24 @@
       "role": "Research Scholar",
       "affiliation": "ETH Zurich - Systems Lab",
       "created_at": "2026-01-08T00:00:00.000Z"
+    },
+    {
+      "id": 9,
+      "name": "Supabase Tester",
+      "email": "supabasetest_1790322728318@example.com",
+      "password": "password123",
+      "role": "Student Researcher",
+      "affiliation": "Test University",
+      "created_at": "2026-09-25T07:52:08.960Z"
+    },
+    {
+      "id": 10,
+      "name": "Dr. Priya",
+      "email": "priya.ai@university.edu",
+      "password": "securePassword123",
+      "role": "Faculty Member",
+      "affiliation": "Anna University",
+      "created_at": "2026-09-25T07:52:40.221Z"
     }
   ],
   "profiles": {
@@ -300,9 +318,73 @@
           "proficiency": 4
         }
       ]
+    },
+    "9": {
+      "user_id": 9,
+      "bio": "Research profile initialized.",
+      "interests": [
+        "Artificial Intelligence",
+        "Data Science"
+      ],
+      "experience": "Academic research enthusiast.",
+      "expertise": "Python, Machine Learning",
+      "skills": [
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 4
+        }
+      ]
+    },
+    "10": {
+      "user_id": 10,
+      "bio": "Research profile initialized.",
+      "interests": [
+        "Artificial Intelligence",
+        "Data Science"
+      ],
+      "experience": "Academic research enthusiast.",
+      "expertise": "Python, Machine Learning",
+      "skills": [
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 4
+        }
+      ]
     }
   },
   "projects": [
+    {
+      "id": 5,
+      "creator_id": 10,
+      "title": "Autonomous Marine Swarm AI",
+      "description": "Underwater robotic communication",
+      "domain": "Artificial Intelligence",
+      "status": "Team Formation",
+      "start_date": "",
+      "end_date": "",
+      "required_skills": [
+        {
+          "name": "Robotics",
+          "proficiency": 5
+        },
+        {
+          "name": "Python",
+          "proficiency": 4
+        }
+      ],
+      "team_members": [
+        {
+          "id": 10,
+          "name": "Dr. Priya",
+          "role": "Faculty Member",
+          "affiliation": "Anna University"
+        }
+      ],
+      "milestones": [],
+      "created_at": "2026-09-25T07:52:44.536+00:00"
+    },
     {
       "id": 3,
       "creator_id": 3,
