@@ -303,6 +303,121 @@ let resources = [
   },
 ];
 
+// Collaboration Requests Store
+let collaborationRequests = [
+  {
+    id: 101,
+    project_id: 1,
+    project_title: "AI-Based Healthcare Prediction System",
+    sender_id: 1,
+    sender_name: "Dr. Arun Kumar",
+    receiver_id: 2,
+    receiver_name: "Prof. Sarah Chen",
+    role: "Collaborator",
+    status: "Pending",
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+  }
+];
+
+// Helper: Extract authenticated user from Authorization header
+function getAuthUser(req) {
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.includes('token_')) {
+    const userId = parseInt(authHeader.split('token_')[1]);
+    const found = users.find(u => u.id === userId);
+    if (found) return found;
+  }
+  return users[0];
+}
+
+// Canonical skill alias mapping
+const SKILL_ALIASES = {
+  'ml': 'machine learning',
+  'machine learning': 'machine learning',
+  'ai': 'artificial intelligence',
+  'artificial intelligence': 'artificial intelligence',
+  'nlp': 'natural language processing',
+  'natural language processing': 'natural language processing',
+  'dl': 'deep learning',
+  'deep learning': 'deep learning',
+  'cv': 'computer vision',
+  'computer vision': 'computer vision',
+  'iot': 'internet of things',
+  'internet of things': 'internet of things',
+  'ds': 'data science',
+  'data science': 'data science',
+};
+
+function normalizeSkill(name) {
+  if (!name) return '';
+  const cleaned = name.toString().toLowerCase().trim().replace(/[-_]/g, ' ');
+  return SKILL_ALIASES[cleaned] || cleaned;
+}
+
+function skillsMatch(skillA, skillB) {
+  const normA = normalizeSkill(skillA);
+  const normB = normalizeSkill(skillB);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  if (normA.includes(normB) || normB.includes(normA)) return true;
+  return false;
+}
+
+function calculateProjectSkillGap(proj, allProfiles) {
+  const reqSkills = proj.required_skills ? proj.required_skills.map(s => s.name || s) : [];
+  if (reqSkills.length === 0) {
+    return {
+      project_id: proj.id,
+      total_required: 0,
+      covered_count: 0,
+      missing_count: 0,
+      covered_skills: [],
+      missing_skills: [],
+      coverage_percentage: 100,
+      gap_percentage: 0,
+    };
+  }
+
+  // Aggregate all team member skills
+  const teamSkills = [];
+  (proj.team_members || []).forEach(m => {
+    if (Array.isArray(m.skills)) {
+      m.skills.forEach(s => teamSkills.push(s.name || s));
+    }
+    const prof = allProfiles[m.id];
+    if (prof && Array.isArray(prof.skills)) {
+      prof.skills.forEach(s => teamSkills.push(s.name || s));
+    }
+  });
+
+  const covered = [];
+  const missing = [];
+
+  reqSkills.forEach(reqSkill => {
+    const isCovered = teamSkills.some(teamSkill => skillsMatch(reqSkill, teamSkill));
+    if (isCovered) {
+      covered.push(reqSkill);
+    } else {
+      missing.push(reqSkill);
+    }
+  });
+
+  const total = reqSkills.length;
+  const coveragePct = Math.round((covered.length / total) * 100);
+  const gapPct = 100 - coveragePct;
+
+  return {
+    project_id: proj.id,
+    total_required: total,
+    covered_count: covered.length,
+    missing_count: missing.length,
+    covered_skills: covered,
+    missing_skills: missing,
+    coverage_percentage: coveragePct,
+    gap_percentage: gapPct,
+  };
+}
+
 // Helper parsing JSON body
 function getJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -486,17 +601,23 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/projects' && method === 'POST') {
       const body = await getJsonBody(req);
+      const authUser = getAuthUser(req);
       const newProj = {
         id: projects.length + 1,
-        creator_id: 1,
+        creator_id: authUser.id,
         title: body.title,
         description: body.description,
-        domain: body.domain,
+        domain: body.domain || 'Artificial Intelligence',
         status: body.status || 'Team Formation',
         start_date: body.start_date,
         end_date: body.end_date,
         required_skills: body.required_skills || [],
-        team_members: [{ id: 1, name: 'Dr. Arun Kumar', role: 'Project Creator', affiliation: 'IIT Madras' }],
+        team_members: [{ 
+          id: authUser.id, 
+          name: authUser.name, 
+          role: authUser.role || 'Project Creator', 
+          affiliation: authUser.affiliation 
+        }],
         milestones: [],
       };
       projects.unshift(newProj);
@@ -507,7 +628,7 @@ const server = http.createServer(async (req, res) => {
       const projId = parseInt(pathname.split('/')[3]);
       const proj = projects.find(p => p.id === projId);
       if (proj) {
-        // Hydrate publications & resources
+        // Hydrate publications & resources strictly matching this project
         const projPubs = publications.filter(pub => pub.project_id === projId);
         const projPatents = patents.filter(pat => pat.project_id === projId);
         const projResources = resources.filter(res => res.domain === proj.domain);
@@ -536,73 +657,120 @@ const server = http.createServer(async (req, res) => {
       return sendJson(200, results);
     }
 
-    // Skill Gap Analysis Route (Module 4)
+    // Skill Gap Analysis Route (Module 4) - Automatically & accurately matches team skills
     if (pathname.match(/^\/api\/projects\/\d+\/skill-gap$/) && method === 'GET') {
       const projId = parseInt(pathname.split('/')[3]);
       const proj = projects.find(p => p.id === projId) || projects[0];
+      const gapData = calculateProjectSkillGap(proj, profiles);
+      return sendJson(200, gapData);
+    }
 
-      const reqSkills = proj.required_skills ? proj.required_skills.map(s => s.name || s) : [];
-      
-      // Combined skills of all current team members
-      let teamSkillsSet = new Set();
-      if (proj.team_members) {
-        proj.team_members.forEach(member => {
-          const userProf = profiles[member.id] || {};
-          if (userProf.skills) {
-            userProf.skills.forEach(s => teamSkillsSet.add((s.name || s).toLowerCase()));
-          }
-        });
+    // Collaboration Requests Routes
+    if (pathname === '/api/collaboration-requests' && method === 'GET') {
+      const authUser = getAuthUser(req);
+      const userReqs = collaborationRequests.filter(
+        r => r.receiver_id === authUser.id || r.sender_id === authUser.id
+      );
+      return sendJson(200, userReqs);
+    }
+
+    if (pathname.match(/^\/api\/projects\/\d+\/requests$/) && method === 'GET') {
+      const projId = parseInt(pathname.split('/')[3]);
+      const projReqs = collaborationRequests.filter(r => r.project_id === projId);
+      return sendJson(200, projReqs);
+    }
+
+    // Create Collaboration Request (instead of directly adding to team)
+    if ((pathname.match(/^\/api\/projects\/\d+\/requests$/) || pathname.match(/^\/api\/projects\/\d+\/team$/) || pathname === '/api/collaboration-requests') && method === 'POST') {
+      const projId = parseInt(pathname.split('/')[3]) || (await getJsonBody(req)).project_id;
+      const body = await getJsonBody(req);
+      const targetProjId = projId || body.project_id;
+      const proj = projects.find(p => p.id === targetProjId);
+      if (!proj) {
+        return sendJson(404, { detail: 'Project not found' });
       }
 
-      let covered = [];
-      let missing = [];
+      const authUser = getAuthUser(req);
+      const targetUserId = body.receiver_id || body.user_id;
+      const userToAdd = users.find(u => u.id === targetUserId);
 
-      reqSkills.forEach(skill => {
-        const lowerS = skill.toLowerCase();
-        let isFound = false;
-        teamSkillsSet.forEach(ts => {
-          if (ts.includes(lowerS) || lowerS.includes(ts)) {
-            isFound = true;
-          }
-        });
+      if (!userToAdd) {
+        return sendJson(404, { detail: 'Target researcher not found' });
+      }
 
-        if (isFound) covered.push(skill);
-        else missing.push(skill);
-      });
+      // Check if already in team
+      if (proj.team_members && proj.team_members.some(m => m.id === userToAdd.id)) {
+        return sendJson(400, { detail: `${userToAdd.name} is already a member of this research team.` });
+      }
 
-      const total = reqSkills.length || 1;
-      const coveragePct = Math.round((covered.length / total) * 100);
-      const gapPct = 100 - coveragePct;
+      // Check if request already pending
+      const existingReq = collaborationRequests.find(
+        r => r.project_id === targetProjId && r.receiver_id === userToAdd.id && r.status === 'Pending'
+      );
+      if (existingReq) {
+        return sendJson(400, { detail: `A collaboration invitation has already been sent to ${userToAdd.name}.` });
+      }
 
-      return sendJson(200, {
-        project_id: projId,
-        total_required: total,
-        covered_count: covered.length,
-        missing_count: missing.length,
-        covered_skills: covered,
-        missing_skills: missing,
-        coverage_percentage: coveragePct,
-        gap_percentage: gapPct,
+      const newRequest = {
+        id: Date.now(),
+        project_id: targetProjId,
+        project_title: proj.title,
+        sender_id: authUser.id,
+        sender_name: authUser.name,
+        receiver_id: userToAdd.id,
+        receiver_name: userToAdd.name,
+        role: body.role || 'Collaborator',
+        status: 'Pending',
+        created_at: new Date().toISOString(),
+      };
+
+      collaborationRequests.unshift(newRequest);
+      return sendJson(201, {
+        message: `Collaboration request sent to ${userToAdd.name}!`,
+        request: newRequest
       });
     }
 
-    // Team Routes
-    if (pathname.match(/^\/api\/projects\/\d+\/team$/) && method === 'POST') {
-      const projId = parseInt(pathname.split('/')[3]);
+    // Respond to Collaboration Request (Accept or Decline)
+    if (pathname.match(/^\/api\/collaboration-requests\/\d+\/respond$/) && method === 'PUT') {
+      const reqId = parseInt(pathname.split('/')[3]);
       const body = await getJsonBody(req);
-      const proj = projects.find(p => p.id === projId);
-      const userToAdd = users.find(u => u.id === body.user_id);
-      if (proj && userToAdd) {
-        if (!proj.team_members.some(m => m.id === userToAdd.id)) {
-          proj.team_members.push({
-            id: userToAdd.id,
-            name: userToAdd.name,
-            role: body.role || userToAdd.role,
-            affiliation: userToAdd.affiliation,
-          });
-        }
-        return sendJson(200, proj);
+      const reqItem = collaborationRequests.find(r => r.id === reqId);
+      if (!reqItem) {
+        return sendJson(404, { detail: 'Collaboration request not found.' });
       }
+
+      const action = (body.action || body.status || '').toLowerCase();
+      if (action === 'accept' || action === 'accepted') {
+        reqItem.status = 'Accepted';
+
+        // Add to team members
+        const proj = projects.find(p => p.id === reqItem.project_id);
+        const receiverUser = users.find(u => u.id === reqItem.receiver_id);
+        if (proj && receiverUser) {
+          if (!proj.team_members.some(m => m.id === receiverUser.id)) {
+            proj.team_members.push({
+              id: receiverUser.id,
+              name: receiverUser.name,
+              role: reqItem.role || 'Collaborator',
+              affiliation: receiverUser.affiliation,
+            });
+          }
+        }
+        return sendJson(200, { message: 'Collaboration invitation accepted!', request: reqItem, project: proj });
+      } else if (action === 'decline' || action === 'declined' || action === 'rejected') {
+        reqItem.status = 'Declined';
+        return sendJson(200, { message: 'Collaboration invitation declined.', request: reqItem });
+      } else {
+        return sendJson(400, { detail: 'Invalid action. Specify "accept" or "decline".' });
+      }
+    }
+
+    // Cancel / Delete Collaboration Request
+    if (pathname.match(/^\/api\/collaboration-requests\/\d+$/) && method === 'DELETE') {
+      const reqId = parseInt(pathname.split('/')[3]);
+      collaborationRequests = collaborationRequests.filter(r => r.id !== reqId);
+      return sendJson(200, { success: true, message: 'Collaboration request withdrawn.' });
     }
 
     if (pathname.match(/^\/api\/projects\/\d+\/team\/\d+$/) && method === 'DELETE') {

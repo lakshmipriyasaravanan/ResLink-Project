@@ -27,9 +27,11 @@ import {
   Database,
   Calendar,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Mail,
+  Send
 } from 'lucide-react';
-import { projectAPI, profileAPI } from '../services/api';
+import { projectAPI, profileAPI, collaborationRequestAPI } from '../services/api';
 
 const ProjectDetails = () => {
   const { id } = useParams();
@@ -39,6 +41,7 @@ const ProjectDetails = () => {
   const [project, setProject] = useState(null);
   const [skillGap, setSkillGap] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  const [projectRequests, setProjectRequests] = useState([]);
   const [selectedResearcher, setSelectedResearcher] = useState(null);
   
   // Delete modal state
@@ -62,19 +65,27 @@ const ProjectDetails = () => {
       setActiveProjectId(id);
       fetchProjectWorkspace();
     }
+
+    const handleTeamUpdate = () => {
+      fetchProjectWorkspace();
+    };
+    window.addEventListener('reslink_team_updated', handleTeamUpdate);
+    return () => window.removeEventListener('reslink_team_updated', handleTeamUpdate);
   }, [id]);
 
   const fetchProjectWorkspace = async () => {
     setLoading(true);
     try {
-      const [projRes, gapRes, recRes] = await Promise.all([
+      const [projRes, gapRes, recRes, reqRes] = await Promise.all([
         projectAPI.getProjectById(id),
         projectAPI.getSkillGap(id),
         projectAPI.getRecommendations(id),
+        collaborationRequestAPI.getRequests(id),
       ]);
       setProject(projRes.data);
       setSkillGap(gapRes.data);
       setRecommendations(recRes.data.slice(0, 3)); // top 3 for dashboard
+      setProjectRequests(reqRes.data || []);
     } catch (err) {
       setToast({ message: 'Failed to load project details workspace.', type: 'error' });
     } finally {
@@ -84,11 +95,21 @@ const ProjectDetails = () => {
 
   const handleAddCollaborator = async (userId) => {
     try {
-      await projectAPI.addTeamMember(id, userId, 'Collaborator');
-      setToast({ message: 'Researcher added to team successfully!', type: 'success' });
+      const res = await collaborationRequestAPI.sendRequest(id, userId, 'Collaborator');
+      setToast({ message: res.data?.message || 'Collaboration request sent successfully!', type: 'success' });
       fetchProjectWorkspace();
     } catch (err) {
-      setToast({ message: err.response?.data?.detail || 'Failed to add collaborator.', type: 'error' });
+      setToast({ message: err.response?.data?.detail || 'Failed to send collaboration request.', type: 'error' });
+    }
+  };
+
+  const handleCancelRequest = async (requestId) => {
+    try {
+      await collaborationRequestAPI.cancelRequest(requestId);
+      setToast({ message: 'Collaboration invitation cancelled.', type: 'info' });
+      fetchProjectWorkspace();
+    } catch (err) {
+      setToast({ message: 'Failed to cancel invitation.', type: 'error' });
     }
   };
 
@@ -312,6 +333,37 @@ const ProjectDetails = () => {
                     </div>
                   ))}
                 </div>
+
+                {/* Pending Collaborator Invitations */}
+                {projectRequests.filter(r => r.status === 'Pending').length > 0 && (
+                  <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>Pending Collaborator Invitations ({projectRequests.filter(r => r.status === 'Pending').length})</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {projectRequests.filter(r => r.status === 'Pending').map((req) => (
+                        <div
+                          key={req.id}
+                          className="p-3 bg-amber-50/70 rounded-2xl border border-amber-200/80 flex items-center justify-between gap-2"
+                        >
+                          <div>
+                            <div className="text-xs font-bold text-slate-900">{req.receiver_name}</div>
+                            <div className="text-[10px] text-amber-800 font-medium">
+                              Invited as {req.role} • Awaiting response
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleCancelRequest(req.id)}
+                            className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 transition-colors shrink-0 shadow-2xs"
+                          >
+                            Withdraw
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Module 3: Top AI Collaborator Recommendations Card */}
@@ -338,6 +390,9 @@ const ProjectDetails = () => {
                 <div className="space-y-3">
                   {recommendations.map((rec) => {
                     const isInTeam = teamUserIds.includes(rec.id);
+                    const isPending = projectRequests.some(
+                      (r) => r.receiver_id === rec.id && r.status === 'Pending'
+                    );
                     return (
                       <div
                         key={rec.id}
@@ -374,14 +429,28 @@ const ProjectDetails = () => {
                           </button>
                           <button
                             onClick={() => handleAddCollaborator(rec.id)}
-                            disabled={isInTeam}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1 transition-all ${
+                            disabled={isInTeam || isPending}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all ${
                               isInTeam
-                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                                : isPending
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200 cursor-not-allowed'
                                 : 'bg-brand-600 hover:bg-brand-700 text-white shadow-xs'
                             }`}
                           >
-                            {isInTeam ? 'On Team' : '+ Add to Team'}
+                            {isInTeam ? (
+                              'On Team'
+                            ) : isPending ? (
+                              <>
+                                <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                <span>Invite Sent</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-3.5 w-3.5" />
+                                <span>+ Send Request</span>
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>

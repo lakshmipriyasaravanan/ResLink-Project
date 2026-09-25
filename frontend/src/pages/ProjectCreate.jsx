@@ -30,10 +30,7 @@ const ProjectCreate = () => {
     end_date: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   });
 
-  const [requiredSkills, setRequiredSkills] = useState([
-    { name: 'Machine Learning', proficiency: 4, is_mandatory: true },
-    { name: 'Python', proficiency: 4, is_mandatory: true },
-  ]);
+  const [requiredSkills, setRequiredSkills] = useState([]);
 
   const [newSkill, setNewSkill] = useState({ name: '', proficiency: 4, is_mandatory: true });
   const [toast, setToast] = useState({ message: '', type: 'info' });
@@ -225,21 +222,27 @@ const ProjectCreate = () => {
                   </span>
                 </div>
 
-                {/* Badges List */}
-                <div className="flex flex-wrap gap-2">
-                  {requiredSkills.map((skill, idx) => (
-                    <div key={idx} className="relative group">
-                      <SkillBadge name={skill.name} proficiency={skill.proficiency} />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSkill(skill.name)}
-                        className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white rounded-full p-0.5 shadow-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                {/* Badges List or Empty State */}
+                {requiredSkills.length === 0 ? (
+                  <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-xs text-slate-500">
+                    No required skills added yet. Specify required skills below to enable automated AI collaborator matching.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {requiredSkills.map((skill, idx) => (
+                      <div key={idx} className="relative group">
+                        <SkillBadge name={skill.name} proficiency={skill.proficiency} />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSkill(skill.name)}
+                          className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white rounded-full p-0.5 shadow-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Add Skill Row */}
                 <div className="flex flex-col sm:flex-row items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">

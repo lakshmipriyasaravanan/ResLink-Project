@@ -17,9 +17,11 @@ import {
   Briefcase, 
   Search,
   Zap,
-  Filter
+  Filter,
+  Clock,
+  Send
 } from 'lucide-react';
-import { projectAPI } from '../services/api';
+import { projectAPI, collaborationRequestAPI } from '../services/api';
 
 const Recommendations = () => {
   const { id } = useParams();
@@ -28,6 +30,7 @@ const Recommendations = () => {
 
   const [project, setProject] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  const [projectRequests, setProjectRequests] = useState([]);
   const [missingSkillsOnly, setMissingSkillsOnly] = useState(false);
   const [selectedResearcher, setSelectedResearcher] = useState(null);
   
@@ -39,9 +42,14 @@ const Recommendations = () => {
       setActiveProjectId(id);
       fetchData();
     } else {
-      // If no project specified in URL, fetch project list to let user pick
       fetchProjects();
     }
+
+    const handleTeamUpdate = () => {
+      if (id) fetchData();
+    };
+    window.addEventListener('reslink_team_updated', handleTeamUpdate);
+    return () => window.removeEventListener('reslink_team_updated', handleTeamUpdate);
   }, [id, missingSkillsOnly]);
 
   const [availableProjects, setAvailableProjects] = useState([]);
@@ -60,12 +68,14 @@ const Recommendations = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [projRes, recRes] = await Promise.all([
+      const [projRes, recRes, reqRes] = await Promise.all([
         projectAPI.getProjectById(id),
         projectAPI.getRecommendations(id, missingSkillsOnly),
+        collaborationRequestAPI.getRequests(id),
       ]);
       setProject(projRes.data);
       setRecommendations(recRes.data);
+      setProjectRequests(reqRes.data || []);
     } catch (err) {
       setToast({ message: 'Failed to generate AI recommendations.', type: 'error' });
     } finally {
@@ -75,11 +85,11 @@ const Recommendations = () => {
 
   const handleAddToTeam = async (userId) => {
     try {
-      await projectAPI.addTeamMember(id, userId, 'Collaborator');
-      setToast({ message: 'Collaborator added to team!', type: 'success' });
+      const res = await collaborationRequestAPI.sendRequest(id, userId, 'Collaborator');
+      setToast({ message: res.data?.message || 'Collaboration request sent successfully!', type: 'success' });
       fetchData();
     } catch (err) {
-      setToast({ message: err.response?.data?.detail || 'Failed to add collaborator.', type: 'error' });
+      setToast({ message: err.response?.data?.detail || 'Failed to send collaboration request.', type: 'error' });
     }
   };
 
@@ -166,6 +176,9 @@ const Recommendations = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {recommendations.map((researcher) => {
                 const isInTeam = teamUserIds.includes(researcher.id);
+                const isPending = projectRequests.some(
+                  (r) => r.receiver_id === researcher.id && r.status === 'Pending'
+                );
                 const score = researcher.match_score || 85;
 
                 return (
@@ -252,10 +265,12 @@ const Recommendations = () => {
 
                       <button
                         onClick={() => handleAddToTeam(researcher.id)}
-                        disabled={isInTeam}
+                        disabled={isInTeam || isPending}
                         className={`flex-1 py-2.5 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all ${
                           isInTeam
                             ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                            : isPending
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200 cursor-not-allowed'
                             : 'bg-brand-600 hover:bg-brand-700 text-white shadow-md shadow-brand-500/20'
                         }`}
                       >
@@ -264,10 +279,15 @@ const Recommendations = () => {
                             <Check className="h-4 w-4 text-emerald-600" />
                             <span>Already on Team</span>
                           </>
+                        ) : isPending ? (
+                          <>
+                            <Clock className="h-4 w-4 text-amber-600" />
+                            <span>Invite Sent</span>
+                          </>
                         ) : (
                           <>
-                            <UserPlus className="h-4 w-4" />
-                            <span>Add to Team</span>
+                            <Send className="h-4 w-4" />
+                            <span>Send Request</span>
                           </>
                         )}
                       </button>
@@ -287,6 +307,7 @@ const Recommendations = () => {
         researcher={selectedResearcher}
         onAddToTeam={handleAddToTeam}
         isAlreadyInTeam={selectedResearcher ? teamUserIds.includes(selectedResearcher.id) : false}
+        isPending={selectedResearcher ? projectRequests.some(r => r.receiver_id === selectedResearcher.id && r.status === 'Pending') : false}
       />
 
       <Toast

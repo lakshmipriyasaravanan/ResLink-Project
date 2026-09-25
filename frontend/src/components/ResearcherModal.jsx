@@ -1,9 +1,9 @@
 import React from 'react';
 import Modal from './Modal';
 import SkillBadge from './SkillBadge';
-import { User, Award, BookOpen, Briefcase, Plus, Check, Sparkles, Building2 } from 'lucide-react';
+import { User, Award, BookOpen, Briefcase, Plus, Check, Sparkles, Building2, Clock } from 'lucide-react';
 
-const ResearcherModal = ({ isOpen, onClose, researcher, onAddToTeam, isAlreadyInTeam }) => {
+const ResearcherModal = ({ isOpen, onClose, researcher, onAddToTeam, isAlreadyInTeam, isPending }) => {
   if (!researcher) return null;
 
   return (
@@ -42,10 +42,12 @@ const ResearcherModal = ({ isOpen, onClose, researcher, onAddToTeam, isAlreadyIn
                 onAddToTeam(researcher.id);
                 onClose();
               }}
-              disabled={isAlreadyInTeam}
+              disabled={isAlreadyInTeam || isPending}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                 isAlreadyInTeam
                   ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                  : isPending
+                  ? 'bg-amber-50 text-amber-800 border border-amber-200 cursor-not-allowed'
                   : 'bg-brand-600 hover:bg-brand-700 text-white shadow-md shadow-brand-500/20'
               }`}
             >
@@ -54,10 +56,15 @@ const ResearcherModal = ({ isOpen, onClose, researcher, onAddToTeam, isAlreadyIn
                   <Check className="h-4 w-4" />
                   <span>On Team</span>
                 </>
+              ) : isPending ? (
+                <>
+                  <Clock className="h-4 w-4 text-amber-600" />
+                  <span>Invite Sent</span>
+                </>
               ) : (
                 <>
                   <Plus className="h-4 w-4" />
-                  <span>Add to Team</span>
+                  <span>Send Request</span>
                 </>
               )}
             </button>

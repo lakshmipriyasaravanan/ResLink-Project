@@ -34,6 +34,12 @@ const SkillGap = () => {
     } else {
       fetchProjects();
     }
+
+    const handleTeamUpdate = () => {
+      if (id) fetchData();
+    };
+    window.addEventListener('reslink_team_updated', handleTeamUpdate);
+    return () => window.removeEventListener('reslink_team_updated', handleTeamUpdate);
   }, [id]);
 
   const fetchProjects = async () => {

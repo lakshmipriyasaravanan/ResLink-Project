@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ? import.meta.env.VITE_API_URL : '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -355,6 +355,86 @@ const saveProfileData = (profile, user) => {
   localStorage.setItem(key, JSON.stringify(profile));
 };
 
+const initialRequests = [
+  {
+    id: 101,
+    project_id: 1,
+    project_title: "AI-Based Healthcare Prediction System",
+    sender_id: 1,
+    sender_name: "Dr. Arun Kumar",
+    receiver_id: 2,
+    receiver_name: "Prof. Sarah Chen",
+    role: "Collaborator",
+    status: "Pending",
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+  }
+];
+
+const getRequestsData = () => {
+  const data = localStorage.getItem('reslink_collab_requests');
+  if (data) {
+    try {
+      return JSON.parse(data);
+    } catch (e) {}
+  }
+  return initialRequests;
+};
+
+const saveRequestsData = (reqs) => {
+  localStorage.setItem('reslink_collab_requests', JSON.stringify(reqs));
+};
+
+const ALL_SEED_RESEARCHERS = [
+  ...arunRecommendations,
+  ...sarahRecommendations,
+  {
+    id: 7,
+    name: "Dr. Anita Roy",
+    role: "Faculty Member",
+    affiliation: "Carnegie Mellon University",
+    bio: "Associate Professor researching Blockchain protocols, Cryptography, and Decentralized Identity.",
+    match_score: 80,
+    matched_skills: ["Cybersecurity", "Blockchain"],
+    skills: [
+      { name: "Blockchain", category: "Cybersecurity", proficiency: 5 },
+      { name: "Cybersecurity", category: "Cybersecurity", proficiency: 5 },
+      { name: "Python", category: "Software Engineering", proficiency: 4 },
+    ]
+  }
+];
+
+const SKILL_ALIASES = {
+  'ml': 'machine learning',
+  'machine learning': 'machine learning',
+  'ai': 'artificial intelligence',
+  'artificial intelligence': 'artificial intelligence',
+  'nlp': 'natural language processing',
+  'natural language processing': 'natural language processing',
+  'dl': 'deep learning',
+  'deep learning': 'deep learning',
+  'cv': 'computer vision',
+  'computer vision': 'computer vision',
+  'iot': 'internet of things',
+  'internet of things': 'internet of things',
+  'ds': 'data science',
+  'data science': 'data science',
+};
+
+function normalizeSkill(name) {
+  if (!name) return '';
+  const cleaned = name.toString().toLowerCase().trim().replace(/[-_]/g, ' ');
+  return SKILL_ALIASES[cleaned] || cleaned;
+}
+
+function skillsMatch(skillA, skillB) {
+  const normA = normalizeSkill(skillA);
+  const normB = normalizeSkill(skillB);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  if (normA.includes(normB) || normB.includes(normA)) return true;
+  return false;
+}
+
 // API Services
 export const authAPI = {
   register: async (userData) => {
@@ -574,9 +654,9 @@ export const projectAPI = {
       return {
         data: {
           ...found,
-          publications: getPubsData(curUser).filter(p => !p.project_id || p.project_id == id),
-          patents: getPatentsData(curUser).filter(p => !p.project_id || p.project_id == id),
-          resources: getResourcesData().filter(r => r.domain === found?.domain || true),
+          publications: getPubsData(curUser).filter(p => p.project_id && p.project_id == id),
+          patents: getPatentsData(curUser).filter(p => p.project_id && p.project_id == id),
+          resources: getResourcesData().filter(r => found?.domain && r.domain === found?.domain),
         }
       };
     }
@@ -603,28 +683,9 @@ export const projectAPI = {
     return { data: { success: true } };
   },
   
-  // Team Management
-  addTeamMember: async (projectId, userId, role) => {
-    const curUser = getCurrentUserFromStorage();
-    const projects = getProjectsData(curUser);
-    const proj = projects.find(p => p.id == projectId) || projects[0];
-    const pool = [...arunRecommendations, ...sarahRecommendations];
-    const rec = pool.find(r => r.id == userId) || { id: userId, name: "Collaborator", affiliation: "University" };
-    
-    if (proj && !proj.team_members.some(m => m.id == userId)) {
-      proj.team_members.push({
-        id: userId,
-        name: rec.name,
-        role: role || rec.role || "Collaborator",
-        affiliation: rec.affiliation,
-      });
-      saveProjectsData(projects, curUser);
-    }
-
-    try {
-      await api.post(`/projects/${projectId}/team`, { user_id: userId, role });
-    } catch (e) {}
-    return { data: proj };
+  // Team Management (Sends request to collaborator)
+  addTeamMember: async (projectId, userId, role = 'Collaborator') => {
+    return await collaborationRequestAPI.sendRequest(projectId, userId, role);
   },
 
   removeTeamMember: async (projectId, userId) => {
@@ -632,7 +693,7 @@ export const projectAPI = {
     const projects = getProjectsData(curUser);
     const proj = projects.find(p => p.id == projectId) || projects[0];
     if (proj) {
-      proj.team_members = proj.team_members.filter(m => m.id != userId);
+      proj.team_members = (proj.team_members || []).filter(m => (m.id || m.user_id) != userId);
       saveProjectsData(projects, curUser);
     }
 
@@ -687,6 +748,12 @@ export const projectAPI = {
     }
   },
   getSkillGap: async (projectId) => {
+    try {
+      const res = await api.get(`/projects/${projectId}/skill-gap`);
+      if (res && res.data) return res;
+    } catch (e) {}
+
+    // Dynamic, automatic team skill gap calculation
     const curUser = getCurrentUserFromStorage();
     const projects = getProjectsData(curUser);
     const proj = projects.find(p => p.id == projectId) || projects[0];
@@ -705,57 +772,219 @@ export const projectAPI = {
       };
     }
 
-    const teamSkills = new Set();
-    
-    (proj.team_members || []).forEach(m => {
-      if (m.id === 1) {
-        teamSkills.add('machine learning');
-        teamSkills.add('python');
-        teamSkills.add('nlp');
-        teamSkills.add('deep learning');
-      } else if (m.id === 2) {
-        teamSkills.add('nlp');
-        teamSkills.add('python');
-        teamSkills.add('data science');
-        teamSkills.add('transformers');
-      } else if (m.id === 3) {
-        teamSkills.add('cloud computing');
-        teamSkills.add('python');
+    const reqSkills = proj.required_skills ? proj.required_skills.map(s => s.name || s) : [];
+    if (reqSkills.length === 0) {
+      return {
+        data: {
+          project_id: projectId,
+          total_required: 0,
+          covered_count: 0,
+          missing_count: 0,
+          covered_skills: [],
+          missing_skills: [],
+          coverage_percentage: 100,
+          gap_percentage: 0,
+        }
+      };
+    }
+
+    // Dynamically aggregate skills from all current team members
+    const teamSkills = [];
+    (proj.team_members || []).forEach(member => {
+      const memId = member.id || member.user_id;
+      // 1. Direct skills on member object
+      if (Array.isArray(member.skills)) {
+        member.skills.forEach(s => teamSkills.push(s.name || s));
+      }
+      // 2. Profile stored in localStorage
+      const storedProf = getProfileData({ id: memId });
+      if (storedProf && Array.isArray(storedProf.skills)) {
+        storedProf.skills.forEach(s => teamSkills.push(s.name || s));
+      }
+      // 3. Pool lookup
+      const foundRec = ALL_SEED_RESEARCHERS.find(r => r.id == memId);
+      if (foundRec && Array.isArray(foundRec.skills)) {
+        foundRec.skills.forEach(s => teamSkills.push(s.name || s));
+      }
+      // 4. Current user check
+      if (curUser && (curUser.id == memId || curUser.user_id == memId)) {
+        const myProf = getProfileData(curUser);
+        if (myProf && Array.isArray(myProf.skills)) {
+          myProf.skills.forEach(s => teamSkills.push(s.name || s));
+        }
       }
     });
 
     const covered = [];
     const missing = [];
 
-    (proj.required_skills || []).forEach(s => {
-      const sName = (s.name || s).toLowerCase();
-      if (teamSkills.has(sName)) {
-        covered.push(s.name || s);
+    reqSkills.forEach(reqSkill => {
+      const isCovered = teamSkills.some(teamSkill => skillsMatch(reqSkill, teamSkill));
+      if (isCovered) {
+        covered.push(reqSkill);
       } else {
-        missing.push(s.name || s);
+        missing.push(reqSkill);
       }
     });
 
-    const total = (proj.required_skills || []).length || 1;
+    const total = reqSkills.length;
     const covPct = Math.round((covered.length / total) * 100);
     const gapPct = 100 - covPct;
 
+    return {
+      data: {
+        project_id: projectId,
+        total_required: total,
+        covered_count: covered.length,
+        missing_count: missing.length,
+        covered_skills: covered,
+        missing_skills: missing,
+        coverage_percentage: covPct,
+        gap_percentage: gapPct,
+      }
+    };
+  },
+};
+
+// Collaboration Requests API Service
+export const collaborationRequestAPI = {
+  getRequests: async (projectId = null) => {
     try {
-      return await api.get(`/projects/${projectId}/skill-gap`);
-    } catch {
-      return {
-        data: {
-          project_id: projectId,
-          total_required: total,
-          covered_count: covered.length,
-          missing_count: missing.length,
-          covered_skills: covered,
-          missing_skills: missing,
-          coverage_percentage: covPct,
-          gap_percentage: gapPct,
-        }
-      };
+      const url = projectId ? `/projects/${projectId}/requests` : '/collaboration-requests';
+      const res = await api.get(url);
+      if (res && res.data) return res;
+    } catch (e) {}
+
+    const curUser = getCurrentUserFromStorage();
+    const all = getRequestsData();
+    let filtered = all;
+    if (projectId) {
+      filtered = all.filter(r => r.project_id == projectId);
+    } else if (curUser) {
+      filtered = all.filter(r => r.receiver_id == curUser.id || r.sender_id == curUser.id);
     }
+    return { data: filtered };
+  },
+
+  sendRequest: async (projectId, receiverId, role = 'Collaborator') => {
+    const curUser = getCurrentUserFromStorage();
+    const projects = getProjectsData(curUser);
+    const proj = projects.find(p => p.id == projectId) || projects[0];
+    const targetUser = ALL_SEED_RESEARCHERS.find(r => r.id == receiverId) || {
+      id: receiverId,
+      name: "Collaborator",
+      affiliation: "University"
+    };
+
+    try {
+      const res = await api.post(`/projects/${projectId}/requests`, { receiver_id: receiverId, role });
+      if (res && res.data) {
+        const allReqs = getRequestsData();
+        allReqs.unshift(res.data.request || res.data);
+        saveRequestsData(allReqs);
+        return res;
+      }
+    } catch (e) {
+      if (e.response && e.response.data && e.response.status === 400) {
+        throw e;
+      }
+    }
+
+    const allReqs = getRequestsData();
+    // Check if already on team
+    if (proj && proj.team_members && proj.team_members.some(m => (m.id || m.user_id) == receiverId)) {
+      const err = new Error(`${targetUser.name} is already a member of this team.`);
+      err.response = { data: { detail: err.message } };
+      throw err;
+    }
+
+    // Check if request already pending
+    if (allReqs.some(r => r.project_id == projectId && r.receiver_id == receiverId && r.status === 'Pending')) {
+      const err = new Error(`A collaboration invitation is already pending for ${targetUser.name}.`);
+      err.response = { data: { detail: err.message } };
+      throw err;
+    }
+
+    const newReq = {
+      id: Date.now(),
+      project_id: projectId,
+      project_title: proj?.title || 'Research Project',
+      sender_id: curUser?.id || 1,
+      sender_name: curUser?.name || 'Dr. Arun Kumar',
+      receiver_id: receiverId,
+      receiver_name: targetUser.name,
+      role: role || targetUser.role || 'Collaborator',
+      status: 'Pending',
+      created_at: new Date().toISOString(),
+    };
+
+    allReqs.unshift(newReq);
+    saveRequestsData(allReqs);
+    return { data: { message: `Collaboration request sent to ${targetUser.name}!`, request: newReq } };
+  },
+
+  respondToRequest: async (requestId, action) => {
+    try {
+      const res = await api.put(`/collaboration-requests/${requestId}/respond`, { action });
+      if (res && res.data) {
+        const allReqs = getRequestsData();
+        const found = allReqs.find(r => r.id == requestId);
+        if (found) {
+          found.status = action === 'accept' ? 'Accepted' : 'Declined';
+          saveRequestsData(allReqs);
+        }
+        return res;
+      }
+    } catch (e) {}
+
+    const curUser = getCurrentUserFromStorage();
+    const allReqs = getRequestsData();
+    const found = allReqs.find(r => r.id == requestId);
+    if (!found) {
+      const err = new Error('Collaboration request not found.');
+      err.response = { data: { detail: err.message } };
+      throw err;
+    }
+
+    if (action === 'accept') {
+      found.status = 'Accepted';
+      saveRequestsData(allReqs);
+
+      // Add to project team
+      const projects = getProjectsData(curUser);
+      const proj = projects.find(p => p.id == found.project_id);
+      if (proj) {
+        const receiver = ALL_SEED_RESEARCHERS.find(r => r.id == found.receiver_id) || curUser || {
+          id: found.receiver_id,
+          name: found.receiver_name,
+          role: found.role
+        };
+        if (!proj.team_members.some(m => (m.id || m.user_id) == found.receiver_id)) {
+          proj.team_members.push({
+            id: found.receiver_id,
+            name: found.receiver_name || receiver.name,
+            role: found.role || 'Collaborator',
+            affiliation: receiver.affiliation || 'University',
+          });
+          saveProjectsData(projects, curUser);
+        }
+      }
+      return { data: { message: 'Collaboration invitation accepted!', request: found } };
+    } else {
+      found.status = 'Declined';
+      saveRequestsData(allReqs);
+      return { data: { message: 'Collaboration invitation declined.', request: found } };
+    }
+  },
+
+  cancelRequest: async (requestId) => {
+    try {
+      await api.delete(`/collaboration-requests/${requestId}`);
+    } catch (e) {}
+
+    const allReqs = getRequestsData().filter(r => r.id != requestId);
+    saveRequestsData(allReqs);
+    return { data: { success: true } };
   },
 };
 
