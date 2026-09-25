@@ -1,6 +1,35 @@
 const fs = require('fs');
 const path = require('path');
 
+// Load environment variables from .env if present
+function loadEnv() {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    try {
+      const content = fs.readFileSync(envPath, 'utf8');
+      const lines = content.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx !== -1) {
+          const key = trimmed.slice(0, eqIdx).trim();
+          const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+          if (key && !process.env[key]) {
+            process.env[key] = val;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read .env file:', e.message);
+    }
+  }
+}
+loadEnv();
+
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
 const DB_FILE = path.join(__dirname, 'reslink.db');
 const JSON_BACKUP_FILE = path.join(__dirname, 'reslink_db.json');
 
@@ -316,15 +345,61 @@ const SEED_RESOURCES = [
   },
 ];
 
-// Database Engine Implementation
+// Supabase REST Client
+class SupabaseClient {
+  constructor(url, key) {
+    this.baseUrl = url.replace(/\/$/, '') + '/rest/v1';
+    this.key = key;
+  }
+
+  async request(path, options = {}) {
+    const headers = {
+      'apikey': this.key,
+      'Authorization': `Bearer ${this.key}`,
+      'Content-Type': 'application/json',
+      'Prefer': options.prefer || 'return=representation',
+      ...(options.headers || {})
+    };
+
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      ...options,
+      headers
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let parsed;
+      try { parsed = JSON.parse(errText); } catch (e) { parsed = { message: errText }; }
+      throw new Error(parsed.message || parsed.detail || `Supabase HTTP ${res.status}`);
+    }
+
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  }
+}
+
+// Unified Database Layer
 class Database {
   constructor() {
+    this.supabase = null;
+    this.isSupabaseActive = false;
     this.sqliteDb = null;
     this.useSqlite = false;
     this.memoryData = null;
 
+    this.initSupabase();
     this.initSqlite();
     this.initData();
+  }
+
+  initSupabase() {
+    if (SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.includes('supabase.co')) {
+      this.supabase = new SupabaseClient(SUPABASE_URL, SUPABASE_KEY);
+      this.isSupabaseActive = true;
+      console.log(`✓ Connected to Cloud Supabase Database: ${SUPABASE_URL}`);
+    } else {
+      console.log('ℹ Supabase not configured in .env (or credentials empty). Running with persistent SQLite database engine.');
+    }
   }
 
   initSqlite() {
@@ -413,14 +488,13 @@ class Database {
       `);
       console.log('✓ SQLite Database initialized: reslink.db');
     } catch (err) {
-      console.warn('Note: node:sqlite not available or disabled, using persistent JSON engine:', err.message);
+      console.warn('Note: node:sqlite not available, using persistent JSON engine:', err.message);
       this.useSqlite = false;
     }
   }
 
   initData() {
     if (this.useSqlite) {
-      // Check if users exist in SQLite
       const countResult = this.sqliteDb.prepare('SELECT count(*) as count FROM users').get();
       if (!countResult || countResult.count === 0) {
         console.log('Seeding initial data into SQLite database...');
@@ -453,7 +527,6 @@ class Database {
           VALUES (?, ?, ?, ?, ?, ?)
         `);
 
-        // Seed Users & Profiles
         for (const u of SEED_USERS) {
           insertUser.run(u.id, u.name, u.email, u.password, u.role, u.affiliation, u.created_at);
           const p = SEED_PROFILES[u.id] || { bio: '', interests: [], experience: '', expertise: '', skills: [] };
@@ -467,7 +540,6 @@ class Database {
           );
         }
 
-        // Seed Projects
         for (const pr of SEED_PROJECTS) {
           insertProject.run(
             pr.id,
@@ -485,29 +557,24 @@ class Database {
           );
         }
 
-        // Seed Collaboration Requests
         for (const r of SEED_REQUESTS) {
           insertReq.run(r.id, r.project_id, r.project_title, r.sender_id, r.sender_name, r.receiver_id, r.receiver_name, r.role, r.status, r.created_at);
         }
 
-        // Seed Publications
         for (const pub of SEED_PUBLICATIONS) {
           insertPub.run(pub.id, pub.project_id, pub.title, pub.authors, pub.venue, pub.publication_date, pub.doi);
         }
 
-        // Seed Patents
         for (const pat of SEED_PATENTS) {
           insertPat.run(pat.id, pat.project_id, pat.title, pat.inventors, pat.filing_date, pat.patent_number, pat.status);
         }
 
-        // Seed Resources
         for (const res of SEED_RESOURCES) {
           insertRes.run(res.id, res.name, res.type, res.description, res.url, res.domain);
         }
       }
       this.syncToJson();
     } else {
-      // JSON File Database
       if (fs.existsSync(JSON_BACKUP_FILE)) {
         try {
           this.memoryData = JSON.parse(fs.readFileSync(JSON_BACKUP_FILE, 'utf8'));
@@ -543,36 +610,72 @@ class Database {
     if (!this.useSqlite) return;
     try {
       const data = {
-        users: this.getAllUsers(),
-        profiles: this.getAllProfiles(),
-        projects: this.getAllProjects(),
-        collaborationRequests: this.getCollaborationRequests(),
-        publications: this.getPublications(),
-        patents: this.getPatents(),
-        resources: this.getResources(),
+        users: this.getAllUsersSync(),
+        profiles: this.getAllProfilesSync(),
+        projects: this.getAllProjectsSync(),
+        collaborationRequests: this.getCollaborationRequestsSync(),
+        publications: this.getPublicationsSync(),
+        patents: this.getPatentsSync(),
+        resources: this.getResourcesSync(),
       };
       fs.writeFileSync(JSON_BACKUP_FILE, JSON.stringify(data, null, 2), 'utf8');
-    } catch (e) {
-      // Non-blocking
-    }
+    } catch (e) {}
   }
 
   // --- Users Operations ---
-  getAllUsers() {
+  async getAllUsers() {
+    if (this.isSupabaseActive) {
+      try {
+        return await this.supabase.request('/users?select=*&order=id.asc');
+      } catch (err) {
+        console.warn('Supabase getAllUsers failed, falling back to local:', err.message);
+      }
+    }
+    return this.getAllUsersSync();
+  }
+
+  getAllUsersSync() {
     if (this.useSqlite) {
       return this.sqliteDb.prepare('SELECT * FROM users ORDER BY id ASC').all();
     }
     return this.memoryData.users;
   }
 
-  getUserById(id) {
+  async getUserById(id) {
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request(`/users?id=eq.${id}&select=*`);
+        return rows && rows[0] ? rows[0] : null;
+      } catch (err) {
+        console.warn('Supabase getUserById failed, falling back to local:', err.message);
+      }
+    }
+    return this.getUserByIdSync(id);
+  }
+
+  getUserByIdSync(id) {
     if (this.useSqlite) {
       return this.sqliteDb.prepare('SELECT * FROM users WHERE id = ?').get(id) || null;
     }
     return this.memoryData.users.find(u => u.id === id) || null;
   }
 
-  getUserByEmail(email) {
+  async getUserByEmail(email) {
+    if (!email) return null;
+    const cleanEmail = email.toLowerCase().trim();
+
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request(`/users?email=ilike.${encodeURIComponent(cleanEmail)}&select=*`);
+        return rows && rows[0] ? rows[0] : null;
+      } catch (err) {
+        console.warn('Supabase getUserByEmail failed, falling back to local:', err.message);
+      }
+    }
+    return this.getUserByEmailSync(cleanEmail);
+  }
+
+  getUserByEmailSync(email) {
     if (!email) return null;
     const cleanEmail = email.toLowerCase().trim();
     if (this.useSqlite) {
@@ -581,30 +684,76 @@ class Database {
     return this.memoryData.users.find(u => u.email.toLowerCase().trim() === cleanEmail) || null;
   }
 
-  createUser({ name, email, password, role, affiliation }) {
+  async createUser({ name, email, password, role, affiliation }) {
     const cleanEmail = email.toLowerCase().trim();
-    const existing = this.getUserByEmail(cleanEmail);
+    const existing = await this.getUserByEmail(cleanEmail);
     if (existing) {
       throw new Error('Email already registered');
     }
 
     const createdAt = new Date().toISOString();
-    let newId;
 
+    if (this.isSupabaseActive) {
+      try {
+        const createdUsers = await this.supabase.request('/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            name,
+            email: cleanEmail,
+            password: password || 'password123',
+            role: role || 'Student Researcher',
+            affiliation: affiliation || 'University',
+            created_at: createdAt
+          })
+        });
+        const newUser = createdUsers[0];
+
+        // Create initial profile in Supabase
+        await this.supabase.request('/profiles', {
+          method: 'POST',
+          body: JSON.stringify({
+            user_id: newUser.id,
+            bio: 'Research profile initialized.',
+            interests: ['Artificial Intelligence', 'Data Science'],
+            experience: 'Academic research enthusiast.',
+            expertise: 'Python, Machine Learning',
+            skills: [{ name: 'Python', category: 'Software Engineering', proficiency: 4 }]
+          })
+        });
+
+        // Also replicate locally
+        this.createUserLocal({ id: newUser.id, name, email: cleanEmail, password, role, affiliation, createdAt });
+        return newUser;
+      } catch (err) {
+        console.warn('Supabase createUser failed, creating locally:', err.message);
+      }
+    }
+
+    return this.createUserLocal({ name, email: cleanEmail, password, role, affiliation, createdAt });
+  }
+
+  createUserLocal({ id, name, email, password, role, affiliation, createdAt }) {
+    let newId = id;
     if (this.useSqlite) {
-      const stmt = this.sqliteDb.prepare(`
-        INSERT INTO users (name, email, password, role, affiliation, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
-      const result = stmt.run(name, cleanEmail, password, role, affiliation, createdAt);
-      newId = Number(result.lastInsertRowid);
+      if (id) {
+        this.sqliteDb.prepare(`
+          INSERT INTO users (id, name, email, password, role, affiliation, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET name = excluded.name
+        `).run(id, name, email, password, role, affiliation, createdAt);
+      } else {
+        const result = this.sqliteDb.prepare(`
+          INSERT INTO users (name, email, password, role, affiliation, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(name, email, password, role, affiliation, createdAt);
+        newId = Number(result.lastInsertRowid);
+      }
 
-      // Create default research profile
-      const profStmt = this.sqliteDb.prepare(`
+      this.sqliteDb.prepare(`
         INSERT INTO profiles (user_id, bio, interests, experience, expertise, skills)
         VALUES (?, ?, ?, ?, ?, ?)
-      `);
-      profStmt.run(
+        ON CONFLICT(user_id) DO NOTHING
+      `).run(
         newId,
         'Research profile initialized.',
         JSON.stringify(['Artificial Intelligence', 'Data Science']),
@@ -614,11 +763,11 @@ class Database {
       );
       this.syncToJson();
     } else {
-      newId = Math.max(10, ...this.memoryData.users.map(u => u.id || 0)) + 1;
+      newId = id || Math.max(10, ...this.memoryData.users.map(u => u.id || 0)) + 1;
       const newUser = {
         id: newId,
         name,
-        email: cleanEmail,
+        email,
         password,
         role: role || 'Student Researcher',
         affiliation: affiliation || 'University',
@@ -636,11 +785,32 @@ class Database {
       this.saveJson();
     }
 
-    return this.getUserById(newId);
+    return this.getUserByIdSync(newId);
   }
 
   // --- Profiles Operations ---
-  getProfile(userId) {
+  async getProfile(userId) {
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request(`/profiles?user_id=eq.${userId}&select=*`);
+        if (rows && rows[0]) {
+          return {
+            user_id: rows[0].user_id,
+            bio: rows[0].bio || '',
+            interests: rows[0].interests || [],
+            experience: rows[0].experience || '',
+            expertise: rows[0].expertise || '',
+            skills: rows[0].skills || [],
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase getProfile failed, reading locally:', err.message);
+      }
+    }
+    return this.getProfileSync(userId);
+  }
+
+  getProfileSync(userId) {
     if (this.useSqlite) {
       const row = this.sqliteDb.prepare('SELECT * FROM profiles WHERE user_id = ?').get(userId);
       if (!row) return null;
@@ -656,7 +826,30 @@ class Database {
     return this.memoryData.profiles[userId] || null;
   }
 
-  getAllProfiles() {
+  async getAllProfiles() {
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request('/profiles?select=*');
+        const map = {};
+        for (const row of rows) {
+          map[row.user_id] = {
+            user_id: row.user_id,
+            bio: row.bio || '',
+            interests: row.interests || [],
+            experience: row.experience || '',
+            expertise: row.expertise || '',
+            skills: row.skills || [],
+          };
+        }
+        return map;
+      } catch (err) {
+        console.warn('Supabase getAllProfiles failed, falling back to local:', err.message);
+      }
+    }
+    return this.getAllProfilesSync();
+  }
+
+  getAllProfilesSync() {
     if (this.useSqlite) {
       const rows = this.sqliteDb.prepare('SELECT * FROM profiles').all();
       const map = {};
@@ -675,10 +868,30 @@ class Database {
     return this.memoryData.profiles;
   }
 
-  saveProfile(userId, profileData) {
-    const existing = this.getProfile(userId) || {};
+  async saveProfile(userId, profileData) {
+    const existing = (await this.getProfile(userId)) || {};
     const updated = { ...existing, ...profileData, user_id: userId };
 
+    if (this.isSupabaseActive) {
+      try {
+        await this.supabase.request('/profiles', {
+          method: 'POST',
+          prefer: 'resolution=merge-duplicates,return=representation',
+          body: JSON.stringify({
+            user_id: userId,
+            bio: updated.bio || '',
+            interests: updated.interests || [],
+            experience: updated.experience || '',
+            expertise: updated.expertise || '',
+            skills: updated.skills || []
+          })
+        });
+      } catch (err) {
+        console.warn('Supabase saveProfile failed, saving locally:', err.message);
+      }
+    }
+
+    // Always replicate locally
     if (this.useSqlite) {
       const stmt = this.sqliteDb.prepare(`
         INSERT INTO profiles (user_id, bio, interests, experience, expertise, skills)
@@ -707,7 +920,24 @@ class Database {
   }
 
   // --- Projects Operations ---
-  getAllProjects() {
+  async getAllProjects() {
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request('/projects?select=*&order=id.desc');
+        return rows.map(r => ({
+          ...r,
+          required_skills: r.required_skills || [],
+          team_members: r.team_members || [],
+          milestones: r.milestones || []
+        }));
+      } catch (err) {
+        console.warn('Supabase getAllProjects failed, falling back to local:', err.message);
+      }
+    }
+    return this.getAllProjectsSync();
+  }
+
+  getAllProjectsSync() {
     if (this.useSqlite) {
       const rows = this.sqliteDb.prepare('SELECT * FROM projects ORDER BY id DESC').all();
       return rows.map(r => ({
@@ -728,7 +958,26 @@ class Database {
     return this.memoryData.projects;
   }
 
-  getProjectById(id) {
+  async getProjectById(id) {
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request(`/projects?id=eq.${id}&select=*`);
+        if (rows && rows[0]) {
+          return {
+            ...rows[0],
+            required_skills: rows[0].required_skills || [],
+            team_members: rows[0].team_members || [],
+            milestones: rows[0].milestones || []
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase getProjectById failed, reading locally:', err.message);
+      }
+    }
+    return this.getProjectByIdSync(id);
+  }
+
+  getProjectByIdSync(id) {
     if (this.useSqlite) {
       const r = this.sqliteDb.prepare('SELECT * FROM projects WHERE id = ?').get(id);
       if (!r) return null;
@@ -750,32 +999,86 @@ class Database {
     return this.memoryData.projects.find(p => p.id === id) || null;
   }
 
-  createProject(projectData) {
+  async createProject(projectData) {
     const createdAt = new Date().toISOString();
-    let newId;
+
+    if (this.isSupabaseActive) {
+      try {
+        const createdRows = await this.supabase.request('/projects', {
+          method: 'POST',
+          body: JSON.stringify({
+            creator_id: projectData.creator_id,
+            title: projectData.title,
+            description: projectData.description || '',
+            domain: projectData.domain || 'Artificial Intelligence',
+            status: projectData.status || 'Team Formation',
+            start_date: projectData.start_date || '',
+            end_date: projectData.end_date || '',
+            required_skills: projectData.required_skills || [],
+            team_members: projectData.team_members || [],
+            milestones: projectData.milestones || [],
+            created_at: createdAt
+          })
+        });
+        const newProj = createdRows[0];
+        // Replicate locally
+        this.createProjectLocal({ ...newProj });
+        return newProj;
+      } catch (err) {
+        console.warn('Supabase createProject failed, creating locally:', err.message);
+      }
+    }
+
+    return this.createProjectLocal({ ...projectData, created_at: createdAt });
+  }
+
+  createProjectLocal(projectData) {
+    const createdAt = projectData.created_at || new Date().toISOString();
+    let newId = projectData.id;
 
     if (this.useSqlite) {
-      const stmt = this.sqliteDb.prepare(`
-        INSERT INTO projects (creator_id, title, description, domain, status, start_date, end_date, required_skills, team_members, milestones, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      const result = stmt.run(
-        projectData.creator_id,
-        projectData.title,
-        projectData.description || '',
-        projectData.domain || 'Artificial Intelligence',
-        projectData.status || 'Team Formation',
-        projectData.start_date || '',
-        projectData.end_date || '',
-        JSON.stringify(projectData.required_skills || []),
-        JSON.stringify(projectData.team_members || []),
-        JSON.stringify(projectData.milestones || []),
-        createdAt
-      );
-      newId = Number(result.lastInsertRowid);
+      if (newId) {
+        this.sqliteDb.prepare(`
+          INSERT INTO projects (id, creator_id, title, description, domain, status, start_date, end_date, required_skills, team_members, milestones, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET title = excluded.title
+        `).run(
+          newId,
+          projectData.creator_id,
+          projectData.title,
+          projectData.description || '',
+          projectData.domain || 'Artificial Intelligence',
+          projectData.status || 'Team Formation',
+          projectData.start_date || '',
+          projectData.end_date || '',
+          JSON.stringify(projectData.required_skills || []),
+          JSON.stringify(projectData.team_members || []),
+          JSON.stringify(projectData.milestones || []),
+          createdAt
+        );
+      } else {
+        const stmt = this.sqliteDb.prepare(`
+          INSERT INTO projects (creator_id, title, description, domain, status, start_date, end_date, required_skills, team_members, milestones, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        const result = stmt.run(
+          projectData.creator_id,
+          projectData.title,
+          projectData.description || '',
+          projectData.domain || 'Artificial Intelligence',
+          projectData.status || 'Team Formation',
+          projectData.start_date || '',
+          projectData.end_date || '',
+          JSON.stringify(projectData.required_skills || []),
+          JSON.stringify(projectData.team_members || []),
+          JSON.stringify(projectData.milestones || []),
+          createdAt
+        );
+        newId = Number(result.lastInsertRowid);
+      }
       this.syncToJson();
     } else {
-      newId = Math.max(10, ...this.memoryData.projects.map(p => p.id || 0)) + 1;
+      newId = newId || Math.max(10, ...this.memoryData.projects.map(p => p.id || 0)) + 1;
       const newProj = {
         id: newId,
         ...projectData,
@@ -785,11 +1088,22 @@ class Database {
       this.saveJson();
     }
 
-    return this.getProjectById(newId);
+    return this.getProjectByIdSync(newId);
   }
 
-  updateProject(id, projectData) {
-    const existing = this.getProjectById(id);
+  async updateProject(id, projectData) {
+    if (this.isSupabaseActive) {
+      try {
+        await this.supabase.request(`/projects?id=eq.${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(projectData)
+        });
+      } catch (err) {
+        console.warn('Supabase updateProject failed, updating locally:', err.message);
+      }
+    }
+
+    const existing = this.getProjectByIdSync(id);
     if (!existing) return null;
     const merged = { ...existing, ...projectData };
 
@@ -831,7 +1145,15 @@ class Database {
     return merged;
   }
 
-  deleteProject(id) {
+  async deleteProject(id) {
+    if (this.isSupabaseActive) {
+      try {
+        await this.supabase.request(`/projects?id=eq.${id}`, { method: 'DELETE' });
+      } catch (err) {
+        console.warn('Supabase deleteProject failed, deleting locally:', err.message);
+      }
+    }
+
     if (this.useSqlite) {
       this.sqliteDb.prepare('DELETE FROM projects WHERE id = ?').run(id);
       this.sqliteDb.prepare('DELETE FROM collaboration_requests WHERE project_id = ?').run(id);
@@ -845,16 +1167,50 @@ class Database {
   }
 
   // --- Collaboration Requests Operations ---
-  getCollaborationRequests() {
+  async getCollaborationRequests() {
+    if (this.isSupabaseActive) {
+      try {
+        return await this.supabase.request('/collaboration_requests?select=*&order=id.desc');
+      } catch (err) {
+        console.warn('Supabase getCollaborationRequests failed, falling back to local:', err.message);
+      }
+    }
+    return this.getCollaborationRequestsSync();
+  }
+
+  getCollaborationRequestsSync() {
     if (this.useSqlite) {
       return this.sqliteDb.prepare('SELECT * FROM collaboration_requests ORDER BY id DESC').all();
     }
     return this.memoryData.collaborationRequests;
   }
 
-  createCollaborationRequest(reqData) {
+  async createCollaborationRequest(reqData) {
     const id = reqData.id || Date.now();
     const createdAt = reqData.created_at || new Date().toISOString();
+
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request('/collaboration_requests', {
+          method: 'POST',
+          body: JSON.stringify({
+            id,
+            project_id: reqData.project_id,
+            project_title: reqData.project_title,
+            sender_id: reqData.sender_id,
+            sender_name: reqData.sender_name,
+            receiver_id: reqData.receiver_id,
+            receiver_name: reqData.receiver_name,
+            role: reqData.role || 'Collaborator',
+            status: reqData.status || 'Pending',
+            created_at: createdAt
+          })
+        });
+        if (rows && rows[0]) return rows[0];
+      } catch (err) {
+        console.warn('Supabase createCollaborationRequest failed, creating locally:', err.message);
+      }
+    }
 
     if (this.useSqlite) {
       const stmt = this.sqliteDb.prepare(`
@@ -883,7 +1239,18 @@ class Database {
     return { id, ...reqData, created_at: createdAt };
   }
 
-  updateCollaborationRequest(id, status) {
+  async updateCollaborationRequest(id, status) {
+    if (this.isSupabaseActive) {
+      try {
+        await this.supabase.request(`/collaboration_requests?id=eq.${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status })
+        });
+      } catch (err) {
+        console.warn('Supabase updateCollaborationRequest failed, updating locally:', err.message);
+      }
+    }
+
     if (this.useSqlite) {
       this.sqliteDb.prepare('UPDATE collaboration_requests SET status = ? WHERE id = ?').run(status, id);
       this.syncToJson();
@@ -896,7 +1263,15 @@ class Database {
     }
   }
 
-  deleteCollaborationRequest(id) {
+  async deleteCollaborationRequest(id) {
+    if (this.isSupabaseActive) {
+      try {
+        await this.supabase.request(`/collaboration_requests?id=eq.${id}`, { method: 'DELETE' });
+      } catch (err) {
+        console.warn('Supabase deleteCollaborationRequest failed, deleting locally:', err.message);
+      }
+    }
+
     if (this.useSqlite) {
       this.sqliteDb.prepare('DELETE FROM collaboration_requests WHERE id = ?').run(id);
       this.syncToJson();
@@ -908,15 +1283,33 @@ class Database {
   }
 
   // --- Publications, Patents, Resources ---
-  getPublications() {
+  async getPublications() {
+    if (this.isSupabaseActive) {
+      try {
+        return await this.supabase.request('/publications?select=*&order=id.desc');
+      } catch (err) {}
+    }
+    return this.getPublicationsSync();
+  }
+
+  getPublicationsSync() {
     if (this.useSqlite) {
       return this.sqliteDb.prepare('SELECT * FROM publications ORDER BY id DESC').all();
     }
     return this.memoryData.publications;
   }
 
-  createPublication(pub) {
+  async createPublication(pub) {
     const id = pub.id || Date.now();
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request('/publications', {
+          method: 'POST',
+          body: JSON.stringify({ id, ...pub })
+        });
+        if (rows && rows[0]) return rows[0];
+      } catch (err) {}
+    }
     if (this.useSqlite) {
       this.sqliteDb.prepare(`
         INSERT INTO publications (id, project_id, title, authors, venue, publication_date, doi)
@@ -930,7 +1323,10 @@ class Database {
     return { id, ...pub };
   }
 
-  deletePublication(id) {
+  async deletePublication(id) {
+    if (this.isSupabaseActive) {
+      try { await this.supabase.request(`/publications?id=eq.${id}`, { method: 'DELETE' }); } catch (e) {}
+    }
     if (this.useSqlite) {
       this.sqliteDb.prepare('DELETE FROM publications WHERE id = ?').run(id);
       this.syncToJson();
@@ -941,15 +1337,31 @@ class Database {
     return true;
   }
 
-  getPatents() {
+  async getPatents() {
+    if (this.isSupabaseActive) {
+      try { return await this.supabase.request('/patents?select=*&order=id.desc'); } catch (err) {}
+    }
+    return this.getPatentsSync();
+  }
+
+  getPatentsSync() {
     if (this.useSqlite) {
       return this.sqliteDb.prepare('SELECT * FROM patents ORDER BY id DESC').all();
     }
     return this.memoryData.patents;
   }
 
-  createPatent(pat) {
+  async createPatent(pat) {
     const id = pat.id || Date.now();
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request('/patents', {
+          method: 'POST',
+          body: JSON.stringify({ id, ...pat })
+        });
+        if (rows && rows[0]) return rows[0];
+      } catch (err) {}
+    }
     if (this.useSqlite) {
       this.sqliteDb.prepare(`
         INSERT INTO patents (id, project_id, title, inventors, filing_date, patent_number, status)
@@ -963,7 +1375,10 @@ class Database {
     return { id, ...pat };
   }
 
-  deletePatent(id) {
+  async deletePatent(id) {
+    if (this.isSupabaseActive) {
+      try { await this.supabase.request(`/patents?id=eq.${id}`, { method: 'DELETE' }); } catch (e) {}
+    }
     if (this.useSqlite) {
       this.sqliteDb.prepare('DELETE FROM patents WHERE id = ?').run(id);
       this.syncToJson();
@@ -974,15 +1389,31 @@ class Database {
     return true;
   }
 
-  getResources() {
+  async getResources() {
+    if (this.isSupabaseActive) {
+      try { return await this.supabase.request('/resources?select=*&order=id.asc'); } catch (err) {}
+    }
+    return this.getResourcesSync();
+  }
+
+  getResourcesSync() {
     if (this.useSqlite) {
       return this.sqliteDb.prepare('SELECT * FROM resources ORDER BY id ASC').all();
     }
     return this.memoryData.resources;
   }
 
-  createResource(res) {
+  async createResource(res) {
     const id = res.id || Date.now();
+    if (this.isSupabaseActive) {
+      try {
+        const rows = await this.supabase.request('/resources', {
+          method: 'POST',
+          body: JSON.stringify({ id, ...res })
+        });
+        if (rows && rows[0]) return rows[0];
+      } catch (err) {}
+    }
     if (this.useSqlite) {
       this.sqliteDb.prepare(`
         INSERT INTO resources (id, name, type, description, url, domain)
@@ -996,7 +1427,10 @@ class Database {
     return { id, ...res };
   }
 
-  deleteResource(id) {
+  async deleteResource(id) {
+    if (this.isSupabaseActive) {
+      try { await this.supabase.request(`/resources?id=eq.${id}`, { method: 'DELETE' }); } catch (e) {}
+    }
     if (this.useSqlite) {
       this.sqliteDb.prepare('DELETE FROM resources WHERE id = ?').run(id);
       this.syncToJson();

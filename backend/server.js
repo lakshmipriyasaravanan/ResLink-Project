@@ -5,17 +5,17 @@ const db = require('./database');
 const PORT = process.env.PORT || 8000;
 
 // Helper: Extract authenticated user from Authorization header
-function getAuthUser(req) {
+async function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
   if (authHeader.includes('token_')) {
     const rawId = authHeader.split('token_')[1];
     const userId = parseInt(rawId);
     if (!isNaN(userId)) {
-      const found = db.getUserById(userId);
+      const found = await db.getUserById(userId);
       if (found) return found;
     }
   }
-  const allUsers = db.getAllUsers();
+  const allUsers = await db.getAllUsers();
   return allUsers[0] || { id: 1, name: "Dr. Arun Kumar", role: "Faculty Member", affiliation: "IIT Madras" };
 }
 
@@ -67,7 +67,6 @@ function calculateProjectSkillGap(proj, allProfiles) {
     };
   }
 
-  // Aggregate all team member skills
   const teamSkills = [];
   (proj.team_members || []).forEach(m => {
     if (Array.isArray(m.skills)) {
@@ -129,14 +128,12 @@ function computeMatch(project, userProfile, userObj) {
 
   const matched = reqSkills.filter(s => profSkills.some(ps => ps.includes(s) || s.includes(ps)));
   
-  // Calculate score 65% - 98% based on skill overlap & background alignment
   let score = 65;
   if (reqSkills.length > 0) {
     const overlapRatio = matched.length / reqSkills.length;
     score = Math.min(98, Math.max(68, Math.round(overlapRatio * 30 + 68)));
   }
 
-  // Boost for domain match in bio/interests
   const interestsText = (userProfile.interests || []).join(' ').toLowerCase();
   if (project.domain && interestsText.includes(project.domain.toLowerCase())) {
     score = Math.min(98, score + 5);
@@ -192,7 +189,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       try {
-        const newUser = db.createUser({
+        const newUser = await db.createUser({
           name: body.name || 'New Researcher',
           email: body.email,
           password: body.password || 'password123',
@@ -208,7 +205,7 @@ const server = http.createServer(async (req, res) => {
     if ((pathname === '/api/auth/login' || pathname === '/auth/login' || pathname === '/api/auth/login/') && method === 'POST') {
       const body = await getJsonBody(req);
       const inputEmail = (body.email || '').toLowerCase().trim();
-      let user = db.getUserByEmail(inputEmail);
+      let user = await db.getUserByEmail(inputEmail);
 
       if (!user) {
         return sendJson(401, { detail: 'Invalid email or password. Please check your credentials or register.' });
@@ -223,8 +220,8 @@ const server = http.createServer(async (req, res) => {
 
     // Profile Routes
     if (pathname === '/api/profiles/me' && method === 'GET') {
-      const authUser = getAuthUser(req);
-      const profObj = db.getProfile(authUser.id) || {
+      const authUser = await getAuthUser(req);
+      const profObj = (await db.getProfile(authUser.id)) || {
         user_id: authUser.id,
         bio: 'Research profile initialized.',
         interests: ['Artificial Intelligence', 'Data Science'],
@@ -237,23 +234,23 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/profiles/me' && method === 'PUT') {
       const body = await getJsonBody(req);
-      const authUser = getAuthUser(req);
-      const updated = db.saveProfile(authUser.id, body);
+      const authUser = await getAuthUser(req);
+      const updated = await db.saveProfile(authUser.id, body);
       return sendJson(200, { ...updated, ...authUser, user_id: authUser.id });
     }
 
     if (pathname === '/api/profiles/all' && method === 'GET') {
-      const allUsers = db.getAllUsers();
-      const allProfiles = db.getAllProfiles();
+      const allUsers = await db.getAllUsers();
+      const allProfiles = await db.getAllProfiles();
       const allRes = allUsers.map(u => ({ ...u, ...(allProfiles[u.id] || {}) }));
       return sendJson(200, allRes);
     }
 
     if (pathname.startsWith('/api/profiles/') && method === 'GET') {
       const pId = parseInt(pathname.split('/')[3]);
-      const userObj = db.getUserById(pId);
+      const userObj = await db.getUserById(pId);
       if (userObj) {
-        const profObj = db.getProfile(pId) || {};
+        const profObj = (await db.getProfile(pId)) || {};
         return sendJson(200, { ...userObj, ...profObj });
       }
       return sendJson(404, { detail: 'Researcher not found' });
@@ -261,13 +258,14 @@ const server = http.createServer(async (req, res) => {
 
     // Projects Routes
     if (pathname === '/api/projects' && method === 'GET') {
-      return sendJson(200, db.getAllProjects());
+      const all = await db.getAllProjects();
+      return sendJson(200, all);
     }
 
     if (pathname === '/api/projects' && method === 'POST') {
       const body = await getJsonBody(req);
-      const authUser = getAuthUser(req);
-      const newProj = db.createProject({
+      const authUser = await getAuthUser(req);
+      const newProj = await db.createProject({
         creator_id: authUser.id,
         title: body.title,
         description: body.description,
@@ -289,11 +287,11 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname.match(/^\/api\/projects\/\d+$/) && method === 'GET') {
       const projId = parseInt(pathname.split('/')[3]);
-      const proj = db.getProjectById(projId);
+      const proj = await db.getProjectById(projId);
       if (proj) {
-        const allPubs = db.getPublications();
-        const allPatents = db.getPatents();
-        const allResources = db.getResources();
+        const allPubs = await db.getPublications();
+        const allPatents = await db.getPatents();
+        const allResources = await db.getResources();
         const projPubs = allPubs.filter(pub => pub.project_id === projId);
         const projPatents = allPatents.filter(pat => pat.project_id === projId);
         const projResources = allResources.filter(res => res.domain === proj.domain);
@@ -311,7 +309,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/projects\/\d+$/) && method === 'PUT') {
       const projId = parseInt(pathname.split('/')[3]);
       const body = await getJsonBody(req);
-      const updated = db.updateProject(projId, body);
+      const updated = await db.updateProject(projId, body);
       if (updated) {
         return sendJson(200, updated);
       }
@@ -320,16 +318,16 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname.match(/^\/api\/projects\/\d+$/) && method === 'DELETE') {
       const projId = parseInt(pathname.split('/')[3]);
-      db.deleteProject(projId);
+      await db.deleteProject(projId);
       return sendJson(200, { success: true, message: 'Project deleted successfully' });
     }
 
     // AI Recommendations Route (Module 3)
     if (pathname.match(/^\/api\/projects\/\d+\/recommendations$/) && method === 'POST') {
       const projId = parseInt(pathname.split('/')[3]);
-      const proj = db.getProjectById(projId) || db.getAllProjects()[0];
-      const allUsers = db.getAllUsers();
-      const allProfiles = db.getAllProfiles();
+      const proj = (await db.getProjectById(projId)) || (await db.getAllProjects())[0];
+      const allUsers = await db.getAllUsers();
+      const allProfiles = await db.getAllProfiles();
 
       let candidateUsers = allUsers.filter(u => u.id !== proj.creator_id);
       let results = candidateUsers.map(u => computeMatch(proj, allProfiles[u.id] || {}, u));
@@ -338,19 +336,19 @@ const server = http.createServer(async (req, res) => {
       return sendJson(200, results);
     }
 
-    // Skill Gap Analysis Route (Module 4) - Automatically & accurately matches team skills
+    // Skill Gap Analysis Route (Module 4)
     if (pathname.match(/^\/api\/projects\/\d+\/skill-gap$/) && method === 'GET') {
       const projId = parseInt(pathname.split('/')[3]);
-      const proj = db.getProjectById(projId) || db.getAllProjects()[0];
-      const allProfiles = db.getAllProfiles();
+      const proj = (await db.getProjectById(projId)) || (await db.getAllProjects())[0];
+      const allProfiles = await db.getAllProfiles();
       const gapData = calculateProjectSkillGap(proj, allProfiles);
       return sendJson(200, gapData);
     }
 
     // Collaboration Requests Routes
     if (pathname === '/api/collaboration-requests' && method === 'GET') {
-      const authUser = getAuthUser(req);
-      const allReqs = db.getCollaborationRequests();
+      const authUser = await getAuthUser(req);
+      const allReqs = await db.getCollaborationRequests();
       const userReqs = allReqs.filter(
         r => r.receiver_id === authUser.id || r.sender_id === authUser.id
       );
@@ -359,7 +357,7 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname.match(/^\/api\/projects\/\d+\/requests$/) && method === 'GET') {
       const projId = parseInt(pathname.split('/')[3]);
-      const allReqs = db.getCollaborationRequests();
+      const allReqs = await db.getCollaborationRequests();
       const projReqs = allReqs.filter(r => r.project_id === projId);
       return sendJson(200, projReqs);
     }
@@ -369,33 +367,31 @@ const server = http.createServer(async (req, res) => {
       const projId = parseInt(pathname.split('/')[3]) || (await getJsonBody(req)).project_id;
       const body = await getJsonBody(req);
       const targetProjId = projId || body.project_id;
-      const proj = db.getProjectById(targetProjId);
+      const proj = await db.getProjectById(targetProjId);
       if (!proj) {
         return sendJson(404, { detail: 'Project not found' });
       }
 
-      const authUser = getAuthUser(req);
+      const authUser = await getAuthUser(req);
       const targetUserId = body.receiver_id || body.user_id;
-      const userToAdd = db.getUserById(targetUserId);
+      const userToAdd = await db.getUserById(targetUserId);
 
       if (!userToAdd) {
         return sendJson(404, { detail: 'Target researcher not found' });
       }
 
-      // Check if already in team
       if (proj.team_members && proj.team_members.some(m => m.id === userToAdd.id)) {
         return sendJson(400, { detail: `${userToAdd.name} is already a member of this research team.` });
       }
 
-      // Check if request already pending
-      const existingReq = db.getCollaborationRequests().find(
+      const existingReq = (await db.getCollaborationRequests()).find(
         r => r.project_id === targetProjId && r.receiver_id === userToAdd.id && r.status === 'Pending'
       );
       if (existingReq) {
         return sendJson(400, { detail: `A collaboration invitation has already been sent to ${userToAdd.name}.` });
       }
 
-      const newRequest = db.createCollaborationRequest({
+      const newRequest = await db.createCollaborationRequest({
         project_id: targetProjId,
         project_title: proj.title,
         sender_id: authUser.id,
@@ -412,11 +408,11 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // Respond to Collaboration Request (Accept or Decline)
+    // Respond to Collaboration Request
     if (pathname.match(/^\/api\/collaboration-requests\/\d+\/respond$/) && method === 'PUT') {
       const reqId = parseInt(pathname.split('/')[3]);
       const body = await getJsonBody(req);
-      const allReqs = db.getCollaborationRequests();
+      const allReqs = await db.getCollaborationRequests();
       const reqItem = allReqs.find(r => r.id === reqId);
       if (!reqItem) {
         return sendJson(404, { detail: 'Collaboration request not found.' });
@@ -424,12 +420,11 @@ const server = http.createServer(async (req, res) => {
 
       const action = (body.action || body.status || '').toLowerCase();
       if (action === 'accept' || action === 'accepted') {
-        db.updateCollaborationRequest(reqId, 'Accepted');
+        await db.updateCollaborationRequest(reqId, 'Accepted');
         reqItem.status = 'Accepted';
 
-        // Add to team members
-        const proj = db.getProjectById(reqItem.project_id);
-        const receiverUser = db.getUserById(reqItem.receiver_id);
+        const proj = await db.getProjectById(reqItem.project_id);
+        const receiverUser = await db.getUserById(reqItem.receiver_id);
         if (proj && receiverUser) {
           const members = proj.team_members || [];
           if (!members.some(m => m.id === receiverUser.id)) {
@@ -439,13 +434,13 @@ const server = http.createServer(async (req, res) => {
               role: reqItem.role || 'Collaborator',
               affiliation: receiverUser.affiliation,
             });
-            db.updateProject(proj.id, { team_members: members });
+            await db.updateProject(proj.id, { team_members: members });
             proj.team_members = members;
           }
         }
         return sendJson(200, { message: 'Collaboration invitation accepted!', request: reqItem, project: proj });
       } else if (action === 'decline' || action === 'declined' || action === 'rejected') {
-        db.updateCollaborationRequest(reqId, 'Declined');
+        await db.updateCollaborationRequest(reqId, 'Declined');
         reqItem.status = 'Declined';
         return sendJson(200, { message: 'Collaboration invitation declined.', request: reqItem });
       } else {
@@ -456,17 +451,17 @@ const server = http.createServer(async (req, res) => {
     // Cancel / Delete Collaboration Request
     if (pathname.match(/^\/api\/collaboration-requests\/\d+$/) && method === 'DELETE') {
       const reqId = parseInt(pathname.split('/')[3]);
-      db.deleteCollaborationRequest(reqId);
+      await db.deleteCollaborationRequest(reqId);
       return sendJson(200, { success: true, message: 'Collaboration request withdrawn.' });
     }
 
     if (pathname.match(/^\/api\/projects\/\d+\/team\/\d+$/) && method === 'DELETE') {
       const projId = parseInt(pathname.split('/')[3]);
       const userId = parseInt(pathname.split('/')[5]);
-      const proj = db.getProjectById(projId);
+      const proj = await db.getProjectById(projId);
       if (proj) {
         const updatedMembers = (proj.team_members || []).filter(m => m.id !== userId);
-        db.updateProject(projId, { team_members: updatedMembers });
+        await db.updateProject(projId, { team_members: updatedMembers });
         return sendJson(200, { ...proj, team_members: updatedMembers });
       }
       return sendJson(404, { detail: 'Project not found' });
@@ -476,7 +471,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/projects\/\d+\/milestones$/) && method === 'POST') {
       const projId = parseInt(pathname.split('/')[3]);
       const body = await getJsonBody(req);
-      const proj = db.getProjectById(projId);
+      const proj = await db.getProjectById(projId);
       if (proj) {
         const newMs = {
           id: Date.now(),
@@ -487,7 +482,7 @@ const server = http.createServer(async (req, res) => {
         };
         const msList = proj.milestones || [];
         msList.push(newMs);
-        db.updateProject(projId, { milestones: msList });
+        await db.updateProject(projId, { milestones: msList });
         return sendJson(200, newMs);
       }
       return sendJson(404, { detail: 'Project not found' });
@@ -496,7 +491,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/milestones\/\d+$/) && method === 'PUT') {
       const msId = parseInt(pathname.split('/')[3]);
       const body = await getJsonBody(req);
-      const allProjects = db.getAllProjects();
+      const allProjects = await db.getAllProjects();
       for (const p of allProjects) {
         let changed = false;
         const updatedMs = (p.milestones || []).map(m => {
@@ -507,7 +502,7 @@ const server = http.createServer(async (req, res) => {
           return m;
         });
         if (changed) {
-          db.updateProject(p.id, { milestones: updatedMs });
+          await db.updateProject(p.id, { milestones: updatedMs });
         }
       }
       return sendJson(200, { success: true });
@@ -515,31 +510,31 @@ const server = http.createServer(async (req, res) => {
 
     // Publications Routes (Module 5)
     if (pathname === '/api/publications' && method === 'GET') {
-      return sendJson(200, db.getPublications());
+      return sendJson(200, await db.getPublications());
     }
     if (pathname === '/api/publications' && method === 'POST') {
       const body = await getJsonBody(req);
-      const newPub = db.createPublication(body);
+      const newPub = await db.createPublication(body);
       return sendJson(200, newPub);
     }
     if (pathname.match(/^\/api\/publications\/\d+$/) && method === 'DELETE') {
       const pId = parseInt(pathname.split('/')[3]);
-      db.deletePublication(pId);
+      await db.deletePublication(pId);
       return sendJson(200, { success: true });
     }
 
     // Patents Routes (Module 5)
     if (pathname === '/api/patents' && method === 'GET') {
-      return sendJson(200, db.getPatents());
+      return sendJson(200, await db.getPatents());
     }
     if (pathname === '/api/patents' && method === 'POST') {
       const body = await getJsonBody(req);
-      const newPat = db.createPatent(body);
+      const newPat = await db.createPatent(body);
       return sendJson(200, newPat);
     }
     if (pathname.match(/^\/api\/patents\/\d+$/) && method === 'DELETE') {
       const pId = parseInt(pathname.split('/')[3]);
-      db.deletePatent(pId);
+      await db.deletePatent(pId);
       return sendJson(200, { success: true });
     }
 
@@ -547,7 +542,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/resources' && method === 'GET') {
       const querySearch = (parsedUrl.query.search || '').toLowerCase();
       const queryType = (parsedUrl.query.type || '').toLowerCase();
-      let resList = db.getResources().filter(r => {
+      const allResources = await db.getResources();
+      let resList = allResources.filter(r => {
         const mSearch = !querySearch || r.name.toLowerCase().includes(querySearch) || (r.description || '').toLowerCase().includes(querySearch) || r.domain.toLowerCase().includes(querySearch);
         const mType = !queryType || r.type.toLowerCase() === queryType;
         return mSearch && mType;
@@ -556,12 +552,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/resources' && method === 'POST') {
       const body = await getJsonBody(req);
-      const newRes = db.createResource(body);
+      const newRes = await db.createResource(body);
       return sendJson(200, newRes);
     }
     if (pathname.match(/^\/api\/resources\/\d+$/) && method === 'DELETE') {
       const rId = parseInt(pathname.split('/')[3]);
-      db.deleteResource(rId);
+      await db.deleteResource(rId);
       return sendJson(200, { success: true });
     }
 
