@@ -21,7 +21,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// --- LocalStorage Persistence Helpers ---
+// --- Initial Seed Data ---
 const initialProjects = [
   {
     id: 1,
@@ -89,7 +89,7 @@ const initialProjects = [
   },
 ];
 
-const initialRecommendations = [
+const arunRecommendations = [
   {
     id: 2,
     name: "Prof. Sarah Chen",
@@ -152,6 +152,66 @@ const initialRecommendations = [
   }
 ];
 
+const sarahRecommendations = [
+  {
+    id: 1,
+    name: "Dr. Arun Kumar",
+    role: "Faculty Member",
+    affiliation: "IIT Madras - Department of CSE",
+    bio: "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics.",
+    match_score: 92,
+    matched_skills: ["Machine Learning", "NLP", "Python"],
+    why_recommended: "Expert alignment in ML evaluation benchmarks, NLP model architectures, and clinical dataset text.",
+    skills: [
+      { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 5 },
+      { name: "Python", category: "Software Engineering", proficiency: 5 },
+      { name: "NLP", category: "Artificial Intelligence", proficiency: 4 },
+    ]
+  },
+  {
+    id: 6,
+    name: "Priyanshu Patel",
+    role: "Student Researcher",
+    affiliation: "IIT Bombay - Centre for ML",
+    bio: "M.Tech scholar exploring IoT sensor networks, Edge AI deployment, and embedded ML optimizations.",
+    match_score: 85,
+    matched_skills: ["Python", "Machine Learning"],
+    why_recommended: "Solid proficiency in Python scripts and benchmark execution.",
+    skills: [
+      { name: "Python", category: "Software Engineering", proficiency: 4 },
+      { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 3 },
+    ]
+  },
+  {
+    id: 8,
+    name: "Alex Mercer",
+    role: "Research Scholar",
+    affiliation: "ETH Zurich - Systems Lab",
+    bio: "PhD candidate working on High-Performance Distributed Computing, Data Engineering, and Real-time Analytics.",
+    match_score: 81,
+    matched_skills: ["Data Science", "Python"],
+    why_recommended: "Data Science and dataset engineering expertise for LLM corpora validation.",
+    skills: [
+      { name: "Data Science", category: "Data Science", proficiency: 5 },
+      { name: "Python", category: "Software Engineering", proficiency: 4 },
+    ]
+  },
+  {
+    id: 5,
+    name: "Marcus Vance",
+    role: "Industry Partner",
+    affiliation: "Google Research Labs",
+    bio: "Principal AI Scientist leading enterprise cloud ML infrastructure and privacy-preserving ML.",
+    match_score: 78,
+    matched_skills: ["Machine Learning", "Python"],
+    why_recommended: "Industry expertise in enterprise LLM evaluation tools.",
+    skills: [
+      { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 5 },
+      { name: "Python", category: "Software Engineering", proficiency: 5 },
+    ]
+  }
+];
+
 const initialPublications = [
   {
     id: 1,
@@ -161,6 +221,15 @@ const initialPublications = [
     venue: "IEEE Journal of Biomedical & Health Informatics",
     publication_date: "2026-01-20",
     doi: "10.1109/JBHI.2026.381920",
+  },
+  {
+    id: 2,
+    project_id: 2,
+    title: "Benchmarking Multilingual LLMs in Low-Resource Settings",
+    authors: "Prof. Sarah Chen, Dr. Arun Kumar",
+    venue: "NeurIPS 2025 Benchmarks Track",
+    publication_date: "2025-12-10",
+    doi: "10.48550/arXiv.2512.09182",
   }
 ];
 
@@ -195,7 +264,16 @@ const initialResources = [
   }
 ];
 
-// Helper functions for reading/writing persistent data
+// Helper functions for reading/writing persistent user-specific data
+const getCurrentUserFromStorage = () => {
+  try {
+    const data = localStorage.getItem('reslink_user');
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
 const getProjectsData = () => {
   const data = localStorage.getItem('reslink_projects_store');
   return data ? JSON.parse(data) : initialProjects;
@@ -228,12 +306,19 @@ const saveResourcesData = (resources) => {
   localStorage.setItem('reslink_resources_store', JSON.stringify(resources));
 };
 
-const getProfileData = () => {
-  const data = localStorage.getItem('reslink_profile_store');
+const getProfileData = (user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  const isSarah = curUser?.email?.toLowerCase().includes('sarah') || curUser?.id === 2;
+  const key = isSarah ? 'reslink_profile_store_2' : 'reslink_profile_store_' + (curUser?.id || 1);
+  const data = localStorage.getItem(key);
   return data ? JSON.parse(data) : null;
 };
-const saveProfileData = (profile) => {
-  localStorage.setItem('reslink_profile_store', JSON.stringify(profile));
+
+const saveProfileData = (profile, user) => {
+  const curUser = user || getCurrentUserFromStorage();
+  const isSarah = curUser?.email?.toLowerCase().includes('sarah') || curUser?.id === 2 || profile?.user_id === 2;
+  const key = isSarah ? 'reslink_profile_store_2' : 'reslink_profile_store_' + (curUser?.id || profile?.user_id || 1);
+  localStorage.setItem(key, JSON.stringify(profile));
 };
 
 // API Services
@@ -267,7 +352,7 @@ export const authAPI = {
         name: isSarah ? 'Prof. Sarah Chen' : 'Dr. Arun Kumar',
         email: credentials.email,
         role: isSarah ? 'Research Scholar' : 'Faculty Member',
-        affiliation: isSarah ? 'Stanford University' : 'IIT Madras - Department of CSE',
+        affiliation: isSarah ? 'Stanford University - AI Lab' : 'IIT Madras - Department of CSE',
       };
       return {
         data: {
@@ -280,16 +365,38 @@ export const authAPI = {
 };
 
 export const profileAPI = {
-  getProfile: async () => {
+  getProfile: async (user = null) => {
     try {
       return await api.get('/profiles/me');
     } catch {
-      const stored = getProfileData();
+      const curUser = user || getCurrentUserFromStorage();
+      const stored = getProfileData(curUser);
       if (stored) return { data: stored };
 
-      const defaultProf = {
+      const isSarah = curUser?.email?.toLowerCase().includes('sarah') || curUser?.id === 2;
+
+      const profileObj = isSarah ? {
+        user_id: 2,
+        name: "Prof. Sarah Chen",
+        role: "Research Scholar",
+        affiliation: "Stanford University - AI Lab",
+        bio: "Postdoctoral researcher focused on Large Language Models, semantic text embeddings, and multilingual NLP benchmark evaluation across low-resource languages.",
+        interests: ["Natural Language Processing", "Transformers", "Data Science", "Machine Learning"],
+        experience: "6 years post-grad research on LLM alignment, RAG pipelines, and tokenization benchmarks.",
+        expertise: "HuggingFace, BERT, LLaMA fine-tuning, PyTorch, Vector DBs, Prompt Engineering",
+        skills: [
+          { name: "NLP", category: "Artificial Intelligence", proficiency: 5 },
+          { name: "Python", category: "Software Engineering", proficiency: 5 },
+          { name: "Data Science", category: "Data Science", proficiency: 4 },
+          { name: "Transformers", category: "Artificial Intelligence", proficiency: 5 },
+          { name: "LLM Fine-tuning", category: "Artificial Intelligence", proficiency: 5 },
+        ]
+      } : {
         user_id: 1,
-        bio: "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics.",
+        name: "Dr. Arun Kumar",
+        role: "Faculty Member",
+        affiliation: "IIT Madras - Department of CSE",
+        bio: "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics. Published over 40+ journal articles.",
         interests: ["Artificial Intelligence", "Machine Learning", "NLP", "Deep Learning"],
         experience: "12 years academic & industrial research in Deep Learning & Medical AI.",
         expertise: "Neural Network Architectures, Transformers, PyTorch, Predictive Modeling",
@@ -300,17 +407,18 @@ export const profileAPI = {
           { name: "Deep Learning", category: "Artificial Intelligence", proficiency: 5 },
         ]
       };
-      saveProfileData(defaultProf);
-      return { data: defaultProf };
+
+      saveProfileData(profileObj, curUser);
+      return { data: profileObj };
     }
   },
-  updateProfile: async (profileData) => {
+  updateProfile: async (profileData, user = null) => {
     try {
       const res = await api.put('/profiles/me', profileData);
-      saveProfileData(res.data);
+      saveProfileData(res.data, user);
       return res;
     } catch {
-      saveProfileData(profileData);
+      saveProfileData(profileData, user);
       return { data: profileData };
     }
   },
@@ -318,14 +426,14 @@ export const profileAPI = {
     try {
       return await api.get('/profiles/all');
     } catch {
-      return { data: initialRecommendations };
+      return { data: arunRecommendations };
     }
   },
   getResearcherById: async (id) => {
     try {
       return await api.get(`/profiles/${id}`);
     } catch {
-      const found = initialRecommendations.find(r => r.id == id) || initialRecommendations[0];
+      const found = arunRecommendations.find(r => r.id == id) || arunRecommendations[0];
       return { data: found };
     }
   },
@@ -344,10 +452,11 @@ export const projectAPI = {
     }
   },
   createProject: async (projectData) => {
+    const curUser = getCurrentUserFromStorage();
     const projects = getProjectsData();
     const newProj = {
       id: Date.now(),
-      creator_id: 1,
+      creator_id: curUser?.id || 1,
       title: projectData.title,
       description: projectData.description,
       domain: projectData.domain || 'Artificial Intelligence',
@@ -355,7 +464,12 @@ export const projectAPI = {
       start_date: projectData.start_date,
       end_date: projectData.end_date,
       required_skills: projectData.required_skills || [],
-      team_members: [{ id: 1, name: 'Dr. Arun Kumar', role: 'Project Creator', affiliation: 'IIT Madras' }],
+      team_members: [{ 
+        id: curUser?.id || 1, 
+        name: curUser?.name || 'Dr. Arun Kumar', 
+        role: curUser?.role || 'Project Creator', 
+        affiliation: curUser?.affiliation || 'University' 
+      }],
       milestones: [],
     };
     projects.unshift(newProj);
@@ -363,9 +477,7 @@ export const projectAPI = {
 
     try {
       await api.post('/projects', projectData);
-    } catch (e) {
-      console.log('Saved project to persistent storage');
-    }
+    } catch (e) {}
     return { data: newProj };
   },
   getProjectById: async (id) => {
@@ -410,7 +522,8 @@ export const projectAPI = {
   addTeamMember: async (projectId, userId, role) => {
     const projects = getProjectsData();
     const proj = projects.find(p => p.id == projectId) || projects[0];
-    const rec = initialRecommendations.find(r => r.id == userId) || { id: userId, name: "Collaborator", affiliation: "University" };
+    const pool = [...arunRecommendations, ...sarahRecommendations];
+    const rec = pool.find(r => r.id == userId) || { id: userId, name: "Collaborator", affiliation: "University" };
     
     if (proj && !proj.team_members.some(m => m.id == userId)) {
       proj.team_members.push({
@@ -479,7 +592,9 @@ export const projectAPI = {
     try {
       return await api.post(`/projects/${projectId}/recommendations`, { missing_skills_only: missingSkillsOnly });
     } catch {
-      return { data: initialRecommendations };
+      const curUser = getCurrentUserFromStorage();
+      const isSarah = curUser?.email?.toLowerCase().includes('sarah') || curUser?.id === 2 || projectId == 2;
+      return { data: isSarah ? sarahRecommendations : arunRecommendations };
     }
   },
   getSkillGap: async (projectId) => {
@@ -492,10 +607,12 @@ export const projectAPI = {
         teamSkills.add('machine learning');
         teamSkills.add('python');
         teamSkills.add('nlp');
+        teamSkills.add('deep learning');
       } else if (m.id === 2) {
         teamSkills.add('nlp');
         teamSkills.add('python');
         teamSkills.add('data science');
+        teamSkills.add('transformers');
       } else if (m.id === 3) {
         teamSkills.add('cloud computing');
         teamSkills.add('python');
