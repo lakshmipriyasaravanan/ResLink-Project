@@ -265,6 +265,27 @@ const initialResources = [
 ];
 
 // Helper functions for reading/writing persistent user-specific data
+const getStoredUsers = () => {
+  try {
+    const data = localStorage.getItem('reslink_users_store');
+    if (data) return JSON.parse(data);
+  } catch (e) {}
+  return [
+    { id: 1, name: "Dr. Arun Kumar", email: "arun.kumar@reslink.edu", password: "password123", role: "Faculty Member", affiliation: "IIT Madras - Department of CSE" },
+    { id: 2, name: "Prof. Sarah Chen", email: "sarah.chen@reslink.edu", password: "password123", role: "Research Scholar", affiliation: "Stanford University - AI Lab" },
+    { id: 3, name: "Dr. Rajesh Sharma", email: "rajesh.sharma@reslink.edu", password: "password123", role: "Faculty Member", affiliation: "IISc Bangalore - Supercomputer Education" },
+    { id: 4, name: "Elena Rostova", email: "elena.rostova@reslink.edu", password: "password123", role: "Student Researcher", affiliation: "MIT - Media Lab" },
+    { id: 5, name: "Marcus Vance", email: "marcus.vance@reslink.edu", password: "password123", role: "Industry Partner", affiliation: "Google Research Labs" },
+    { id: 6, name: "Priyanshu Patel", email: "priyanshu.patel@reslink.edu", password: "password123", role: "Student Researcher", affiliation: "IIT Bombay - Centre for ML" },
+    { id: 7, name: "Dr. Anita Roy", email: "anita.roy@reslink.edu", password: "password123", role: "Faculty Member", affiliation: "Carnegie Mellon University" },
+    { id: 8, name: "Alex Mercer", email: "alex.mercer@reslink.edu", password: "password123", role: "Research Scholar", affiliation: "ETH Zurich - Systems Lab" },
+  ];
+};
+
+const saveStoredUsers = (users) => {
+  localStorage.setItem('reslink_users_store', JSON.stringify(users));
+};
+
 const getCurrentUserFromStorage = () => {
   try {
     const data = localStorage.getItem('reslink_user');
@@ -439,17 +460,55 @@ function skillsMatch(skillA, skillB) {
 export const authAPI = {
   register: async (userData) => {
     try {
-      return await api.post('/auth/register', userData);
-    } catch {
-      const newId = Date.now();
+      const res = await api.post('/auth/register', userData);
+      if (res.data?.user) {
+        const users = getStoredUsers();
+        if (!users.some(u => u.email.toLowerCase() === res.data.user.email.toLowerCase())) {
+          users.push({ ...res.data.user, password: userData.password });
+          saveStoredUsers(users);
+        }
+      }
+      return res;
+    } catch (err) {
+      if (err.response?.status === 400) {
+        throw err;
+      }
+      const users = getStoredUsers();
+      const cleanEmail = (userData.email || '').toLowerCase().trim();
+      const existing = users.find(u => u.email.toLowerCase().trim() === cleanEmail);
+      if (existing) {
+        const error = new Error('Email is already registered. Please sign in instead.');
+        error.response = { data: { detail: 'Email is already registered. Please sign in instead.' } };
+        throw error;
+      }
+
+      const newId = Math.max(10, ...users.map(u => u.id || 0)) + 1;
       const newUserObj = {
         id: newId,
         name: userData.name || 'New Researcher',
-        email: userData.email,
+        email: cleanEmail,
+        password: userData.password || 'password123',
         role: userData.role || 'Student Researcher',
         affiliation: userData.affiliation || 'University',
         is_new_user: true,
       };
+      users.push(newUserObj);
+      saveStoredUsers(users);
+
+      // Initialize persistent profile and empty project store for this new user
+      saveProfileData({
+        user_id: newId,
+        name: newUserObj.name,
+        role: newUserObj.role,
+        affiliation: newUserObj.affiliation,
+        bio: 'Research scholar & academic collaborator.',
+        interests: ['Artificial Intelligence', 'Data Science'],
+        experience: 'Academic & lab research.',
+        expertise: 'Python, Machine Learning',
+        skills: [{ name: 'Python', category: 'Software Engineering', proficiency: 4 }],
+      }, newUserObj);
+      saveProjectsData([], newUserObj);
+
       return {
         data: {
           token: `reslink_jwt_token_${newId}`,
@@ -460,44 +519,42 @@ export const authAPI = {
   },
   login: async (credentials) => {
     try {
-      return await api.post('/auth/login', credentials);
-    } catch {
-      const email = (credentials.email || '').toLowerCase();
-      const isSarah = email.includes('sarah');
-      const isArun = email.includes('arun');
-      
-      let demoUser;
-      if (isSarah) {
-        demoUser = {
-          id: 2,
-          name: 'Prof. Sarah Chen',
-          email: credentials.email,
-          role: 'Research Scholar',
-          affiliation: 'Stanford University - AI Lab',
-        };
-      } else if (isArun) {
-        demoUser = {
-          id: 1,
-          name: 'Dr. Arun Kumar',
-          email: credentials.email,
-          role: 'Faculty Member',
-          affiliation: 'IIT Madras - Department of CSE',
-        };
-      } else {
-        demoUser = {
-          id: Date.now(),
-          name: credentials.email.split('@')[0].toUpperCase(),
-          email: credentials.email,
-          role: 'Student Researcher',
-          affiliation: 'Stanford University',
-          is_new_user: true,
-        };
+      const res = await api.post('/auth/login', credentials);
+      if (res.data?.user) {
+        const users = getStoredUsers();
+        const existingIdx = users.findIndex(u => u.email.toLowerCase() === res.data.user.email.toLowerCase());
+        if (existingIdx === -1) {
+          users.push({ ...res.data.user, password: credentials.password });
+        } else {
+          users[existingIdx] = { ...users[existingIdx], ...res.data.user };
+        }
+        saveStoredUsers(users);
+      }
+      return res;
+    } catch (err) {
+      if (err.response?.status === 401) {
+        throw err;
+      }
+      const users = getStoredUsers();
+      const cleanEmail = (credentials.email || '').toLowerCase().trim();
+      const found = users.find(u => u.email.toLowerCase().trim() === cleanEmail);
+
+      if (!found) {
+        const error = new Error('Invalid email or password. Please check your credentials or register.');
+        error.response = { data: { detail: 'Invalid email or password. Please check your credentials or register.' } };
+        throw error;
+      }
+
+      if (credentials.password && found.password && found.password !== credentials.password && found.password !== 'password123') {
+        const error = new Error('Invalid email or password. Please check your credentials.');
+        error.response = { data: { detail: 'Invalid email or password. Please check your credentials.' } };
+        throw error;
       }
 
       return {
         data: {
-          token: `reslink_jwt_token_${demoUser.id}`,
-          user: demoUser
+          token: `reslink_jwt_token_${found.id}`,
+          user: found
         }
       };
     }

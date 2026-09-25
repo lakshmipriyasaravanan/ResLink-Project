@@ -63,57 +63,23 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    try {
-      const res = await authAPI.login({ email, password });
-      const { token, user: userData } = res.data;
-      localStorage.setItem('reslink_token', token);
-      localStorage.setItem('reslink_user', JSON.stringify(userData));
-      setUser(userData);
-      await fetchUserProfile(userData);
-      return userData;
-    } catch (err) {
-      // Fail-safe client demo fallback for Vercel live deployment
-      const isSarah = email.toLowerCase().includes('sarah');
-      const demoUser = {
-        id: isSarah ? 2 : 1,
-        name: isSarah ? 'Prof. Sarah Chen' : 'Dr. Arun Kumar',
-        email: email,
-        role: isSarah ? 'Research Scholar' : 'Faculty Member',
-        affiliation: isSarah ? 'Stanford University' : 'IIT Madras - Department of CSE',
-      };
-      const token = `reslink_jwt_token_${demoUser.id}`;
-      localStorage.setItem('reslink_token', token);
-      localStorage.setItem('reslink_user', JSON.stringify(demoUser));
-      setUser(demoUser);
-      await fetchUserProfile(demoUser);
-      return demoUser;
-    }
+    const res = await authAPI.login({ email, password });
+    const { token, user: userData } = res.data;
+    localStorage.setItem('reslink_token', token);
+    localStorage.setItem('reslink_user', JSON.stringify(userData));
+    setUser(userData);
+    await fetchUserProfile(userData);
+    return userData;
   };
 
   const register = async (registerData) => {
-    try {
-      const res = await authAPI.register(registerData);
-      const { token, user: userData } = res.data;
-      localStorage.setItem('reslink_token', token);
-      localStorage.setItem('reslink_user', JSON.stringify(userData));
-      setUser(userData);
-      await fetchUserProfile(userData);
-      return userData;
-    } catch (err) {
-      const demoUser = {
-        id: Date.now(),
-        name: registerData.name || 'New Researcher',
-        email: registerData.email,
-        role: registerData.role || 'Student Researcher',
-        affiliation: registerData.affiliation || 'University',
-      };
-      const token = `reslink_jwt_token_${demoUser.id}`;
-      localStorage.setItem('reslink_token', token);
-      localStorage.setItem('reslink_user', JSON.stringify(demoUser));
-      setUser(demoUser);
-      await fetchUserProfile(demoUser);
-      return demoUser;
-    }
+    const res = await authAPI.register(registerData);
+    const { token, user: userData } = res.data;
+    localStorage.setItem('reslink_token', token);
+    localStorage.setItem('reslink_user', JSON.stringify(userData));
+    setUser(userData);
+    await fetchUserProfile(userData);
+    return userData;
   };
 
   const logout = () => {

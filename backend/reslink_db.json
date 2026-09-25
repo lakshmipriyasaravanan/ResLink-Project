@@ -1,0 +1,517 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Dr. Arun Kumar",
+      "email": "arun.kumar@reslink.edu",
+      "password": "password123",
+      "role": "Faculty Member",
+      "affiliation": "IIT Madras - Department of CSE",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "name": "Prof. Sarah Chen",
+      "email": "sarah.chen@reslink.edu",
+      "password": "password123",
+      "role": "Research Scholar",
+      "affiliation": "Stanford University - AI Lab",
+      "created_at": "2026-01-02T00:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "name": "Dr. Rajesh Sharma",
+      "email": "rajesh.sharma@reslink.edu",
+      "password": "password123",
+      "role": "Faculty Member",
+      "affiliation": "IISc Bangalore - Supercomputer Education",
+      "created_at": "2026-01-03T00:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "name": "Elena Rostova",
+      "email": "elena.rostova@reslink.edu",
+      "password": "password123",
+      "role": "Student Researcher",
+      "affiliation": "MIT - Media Lab",
+      "created_at": "2026-01-04T00:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "name": "Marcus Vance",
+      "email": "marcus.vance@reslink.edu",
+      "password": "password123",
+      "role": "Industry Partner",
+      "affiliation": "Google Research Labs",
+      "created_at": "2026-01-05T00:00:00.000Z"
+    },
+    {
+      "id": 6,
+      "name": "Priyanshu Patel",
+      "email": "priyanshu.patel@reslink.edu",
+      "password": "password123",
+      "role": "Student Researcher",
+      "affiliation": "IIT Bombay - Centre for ML",
+      "created_at": "2026-01-06T00:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "name": "Dr. Anita Roy",
+      "email": "anita.roy@reslink.edu",
+      "password": "password123",
+      "role": "Faculty Member",
+      "affiliation": "Carnegie Mellon University",
+      "created_at": "2026-01-07T00:00:00.000Z"
+    },
+    {
+      "id": 8,
+      "name": "Alex Mercer",
+      "email": "alex.mercer@reslink.edu",
+      "password": "password123",
+      "role": "Research Scholar",
+      "affiliation": "ETH Zurich - Systems Lab",
+      "created_at": "2026-01-08T00:00:00.000Z"
+    }
+  ],
+  "profiles": {
+    "1": {
+      "user_id": 1,
+      "bio": "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics. Published over 40+ journal articles.",
+      "interests": [
+        "Artificial Intelligence",
+        "Machine Learning",
+        "NLP",
+        "Deep Learning"
+      ],
+      "experience": "12 years academic & industrial research in Deep Learning & Medical AI.",
+      "expertise": "Neural Network Architectures, Transformers, PyTorch, Predictive Modeling",
+      "skills": [
+        {
+          "name": "Machine Learning",
+          "category": "Artificial Intelligence",
+          "proficiency": 5
+        },
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 5
+        },
+        {
+          "name": "NLP",
+          "category": "Artificial Intelligence",
+          "proficiency": 4
+        },
+        {
+          "name": "Deep Learning",
+          "category": "Artificial Intelligence",
+          "proficiency": 5
+        }
+      ]
+    },
+    "2": {
+      "user_id": 2,
+      "bio": "Postdoctoral researcher focused on Large Language Models, semantic text embeddings, and multilingual NLP benchmark evaluation.",
+      "interests": [
+        "Natural Language Processing",
+        "Transformers",
+        "Data Science",
+        "Machine Learning"
+      ],
+      "experience": "6 years post-grad research on LLM alignment, rag pipelines, and tokenization.",
+      "expertise": "HuggingFace, BERT, LLaMA fine-tuning, PyTorch, Vector DBs",
+      "skills": [
+        {
+          "name": "NLP",
+          "category": "Artificial Intelligence",
+          "proficiency": 5
+        },
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 5
+        },
+        {
+          "name": "Data Science",
+          "category": "Data Science",
+          "proficiency": 4
+        },
+        {
+          "name": "Machine Learning",
+          "category": "Artificial Intelligence",
+          "proficiency": 4
+        }
+      ]
+    },
+    "3": {
+      "user_id": 3,
+      "bio": "Supercomputing educator and systems architect designing resilient edge-cloud hybrid topologies for smart cities.",
+      "interests": [
+        "Cloud Computing",
+        "Distributed Systems",
+        "IoT",
+        "Cybersecurity"
+      ],
+      "experience": "15 years HPC cluster optimization and high-availability distributed grids.",
+      "expertise": "Kubernetes, Docker, Edge Computing, MPI, Python",
+      "skills": [
+        {
+          "name": "Cloud Computing",
+          "category": "Cloud & Systems",
+          "proficiency": 5
+        },
+        {
+          "name": "Data Science",
+          "category": "Data Science",
+          "proficiency": 4
+        },
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 4
+        }
+      ]
+    },
+    "4": {
+      "user_id": 4,
+      "bio": "Graduate researcher working on Multimodal Generative AI, generative video models, and real-time diffusion pipelines.",
+      "interests": [
+        "Computer Vision",
+        "Generative AI",
+        "Deep Learning"
+      ],
+      "experience": "3 years computer vision research, OpenCV image processing, diffusion models.",
+      "expertise": "Diffusion Models, Stable Diffusion, PyTorch, OpenCV, Computer Vision",
+      "skills": [
+        {
+          "name": "Computer Vision",
+          "category": "Artificial Intelligence",
+          "proficiency": 5
+        },
+        {
+          "name": "Machine Learning",
+          "category": "Artificial Intelligence",
+          "proficiency": 4
+        },
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 4
+        }
+      ]
+    },
+    "5": {
+      "user_id": 5,
+      "bio": "Principal AI Scientist leading enterprise cloud ML infrastructure and privacy-preserving ML at Google Research Labs.",
+      "interests": [
+        "Cloud Computing",
+        "Machine Learning",
+        "Privacy-Preserving AI"
+      ],
+      "experience": "10 years industrial software architecture and scalable ML serving pipelines.",
+      "expertise": "GCP, TensorFlow Serving, Federated Learning, Python",
+      "skills": [
+        {
+          "name": "Cloud Computing",
+          "category": "Cloud & Systems",
+          "proficiency": 5
+        },
+        {
+          "name": "Machine Learning",
+          "category": "Artificial Intelligence",
+          "proficiency": 5
+        },
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 5
+        }
+      ]
+    },
+    "6": {
+      "user_id": 6,
+      "bio": "M.Tech scholar exploring IoT sensor networks, Edge AI deployment, and embedded ML optimizations.",
+      "interests": [
+        "Edge AI",
+        "Embedded Systems",
+        "IoT"
+      ],
+      "experience": "2 years embedded Linux programming and Raspberry Pi sensor analytics.",
+      "expertise": "TinyML, MicroPython, IoT Protocols, C++, Python",
+      "skills": [
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 4
+        },
+        {
+          "name": "Machine Learning",
+          "category": "Artificial Intelligence",
+          "proficiency": 3
+        }
+      ]
+    },
+    "7": {
+      "user_id": 7,
+      "bio": "Associate Professor researching Blockchain protocols, Cryptography, and Decentralized Identity at CMU.",
+      "interests": [
+        "Cybersecurity",
+        "Blockchain",
+        "Distributed Systems"
+      ],
+      "experience": "9 years cryptography and consensus mechanisms research.",
+      "expertise": "Smart Contracts, Zero-Knowledge Proofs, Rust, Python",
+      "skills": [
+        {
+          "name": "Blockchain",
+          "category": "Cybersecurity",
+          "proficiency": 5
+        },
+        {
+          "name": "Cybersecurity",
+          "category": "Cybersecurity",
+          "proficiency": 5
+        },
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 3
+        }
+      ]
+    },
+    "8": {
+      "user_id": 8,
+      "bio": "PhD candidate working on High-Performance Distributed Computing, Data Engineering, and Real-time Analytics at ETH Zurich.",
+      "interests": [
+        "Data Science",
+        "Distributed Computing",
+        "MLOps"
+      ],
+      "experience": "4 years Spark pipelines, Ray distributed clusters, and big data benchmarks.",
+      "expertise": "Apache Spark, Ray, Kafka, Python, Data Science",
+      "skills": [
+        {
+          "name": "Data Science",
+          "category": "Data Science",
+          "proficiency": 5
+        },
+        {
+          "name": "Python",
+          "category": "Software Engineering",
+          "proficiency": 4
+        }
+      ]
+    }
+  },
+  "projects": [
+    {
+      "id": 3,
+      "creator_id": 3,
+      "title": "Secure Edge-Cloud AI Framework for Smart Grids",
+      "description": "Designing a fault-tolerant, privacy-preserving microservices framework for processing IoT smart meter analytics using cloud edge nodes.",
+      "domain": "Cloud & Distributed Systems",
+      "status": "Planning",
+      "start_date": "2026-05-01",
+      "end_date": "2026-11-30",
+      "required_skills": [
+        {
+          "name": "Cloud Computing",
+          "proficiency": 5,
+          "is_mandatory": true
+        },
+        {
+          "name": "Cybersecurity",
+          "proficiency": 4,
+          "is_mandatory": true
+        },
+        {
+          "name": "IoT",
+          "proficiency": 4,
+          "is_mandatory": true
+        },
+        {
+          "name": "Python",
+          "proficiency": 4,
+          "is_mandatory": true
+        }
+      ],
+      "team_members": [
+        {
+          "id": 3,
+          "name": "Dr. Rajesh Sharma",
+          "role": "Project Creator",
+          "affiliation": "IISc Bangalore"
+        }
+      ],
+      "milestones": [],
+      "created_at": "2026-05-01T00:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "creator_id": 2,
+      "title": "Multilingual LLM Evaluation Benchmark",
+      "description": "Constructing an open-source evaluation suite to benchmark multilingual reasoning capabilities of LLMs across Indian languages.",
+      "domain": "Natural Language Processing",
+      "status": "In Progress",
+      "start_date": "2026-01-15",
+      "end_date": "2026-08-15",
+      "required_skills": [
+        {
+          "name": "NLP",
+          "proficiency": 5,
+          "is_mandatory": true
+        },
+        {
+          "name": "Python",
+          "proficiency": 5,
+          "is_mandatory": true
+        },
+        {
+          "name": "Data Science",
+          "proficiency": 4,
+          "is_mandatory": true
+        }
+      ],
+      "team_members": [
+        {
+          "id": 2,
+          "name": "Prof. Sarah Chen",
+          "role": "Lead Researcher",
+          "affiliation": "Stanford University"
+        },
+        {
+          "id": 1,
+          "name": "Dr. Arun Kumar",
+          "role": "Co-Investigator",
+          "affiliation": "IIT Madras"
+        }
+      ],
+      "milestones": [],
+      "created_at": "2026-01-15T00:00:00.000Z"
+    },
+    {
+      "id": 1,
+      "creator_id": 1,
+      "title": "AI-Based Healthcare Prediction System",
+      "description": "Developing a real-time clinical prediction engine using electronic health records (EHR) and deep learning transformers to forecast patient ICU stay durations and disease progression.",
+      "domain": "Artificial Intelligence",
+      "status": "Team Formation",
+      "start_date": "2026-03-01",
+      "end_date": "2026-09-30",
+      "required_skills": [
+        {
+          "name": "Machine Learning",
+          "proficiency": 4,
+          "is_mandatory": true
+        },
+        {
+          "name": "Python",
+          "proficiency": 4,
+          "is_mandatory": true
+        },
+        {
+          "name": "NLP",
+          "proficiency": 4,
+          "is_mandatory": true
+        },
+        {
+          "name": "Cloud Computing",
+          "proficiency": 4,
+          "is_mandatory": true
+        },
+        {
+          "name": "Data Science",
+          "proficiency": 4,
+          "is_mandatory": true
+        }
+      ],
+      "team_members": [
+        {
+          "id": 1,
+          "name": "Dr. Arun Kumar",
+          "role": "Principal Investigator",
+          "affiliation": "IIT Madras"
+        }
+      ],
+      "milestones": [
+        {
+          "id": 1,
+          "title": "Literature Review & Dataset Ingestion",
+          "description": "Incorporate MIMIC-IV electronic health dataset.",
+          "due_date": "2026-04-15",
+          "status": "Completed"
+        },
+        {
+          "id": 2,
+          "title": "Transformer Model Training & Evaluation",
+          "description": "Train BERT/BioClinical models on clinical text.",
+          "due_date": "2026-06-30",
+          "status": "In Progress"
+        }
+      ],
+      "created_at": "2026-03-01T00:00:00.000Z"
+    }
+  ],
+  "collaborationRequests": [
+    {
+      "id": 101,
+      "project_id": 1,
+      "project_title": "AI-Based Healthcare Prediction System",
+      "sender_id": 1,
+      "sender_name": "Dr. Arun Kumar",
+      "receiver_id": 2,
+      "receiver_name": "Prof. Sarah Chen",
+      "role": "Collaborator",
+      "status": "Pending",
+      "created_at": "2026-09-25T04:14:29.222Z"
+    }
+  ],
+  "publications": [
+    {
+      "id": 2,
+      "project_id": 2,
+      "title": "Benchmarking Multilingual LLMs in Low-Resource Settings",
+      "authors": "Prof. Sarah Chen, Dr. Arun Kumar",
+      "venue": "NeurIPS 2025 Benchmarks Track",
+      "publication_date": "2025-12-10",
+      "doi": "10.48550/arXiv.2512.09182"
+    },
+    {
+      "id": 1,
+      "project_id": 1,
+      "title": "Transformer Architectures for Predictive Healthcare Analytics",
+      "authors": "Dr. Arun Kumar, Prof. Sarah Chen",
+      "venue": "IEEE Journal of Biomedical & Health Informatics",
+      "publication_date": "2026-01-20",
+      "doi": "10.1109/JBHI.2026.381920"
+    }
+  ],
+  "patents": [
+    {
+      "id": 1,
+      "project_id": 1,
+      "title": "Privacy-Preserving Clinical Risk Scoring via Neural Vector Quantization",
+      "inventors": "Dr. Arun Kumar, Marcus Vance",
+      "filing_date": "2026-02-14",
+      "patent_number": "US20260049281A1",
+      "status": "Under Review"
+    }
+  ],
+  "resources": [
+    {
+      "id": 1,
+      "name": "MIMIC-IV De-identified Clinical Dataset",
+      "type": "Dataset",
+      "description": "Electronic health records covering thousands of ICU patient stays for predictive medical modeling.",
+      "url": "https://physionet.org/content/mimiciv/",
+      "domain": "Artificial Intelligence"
+    },
+    {
+      "id": 2,
+      "name": "HuggingFace Transformers Library",
+      "type": "Framework",
+      "description": "State-of-the-art Natural Language Processing library for PyTorch and TensorFlow.",
+      "url": "https://huggingface.co/docs/transformers/",
+      "domain": "Natural Language Processing"
+    }
+  ]
+}

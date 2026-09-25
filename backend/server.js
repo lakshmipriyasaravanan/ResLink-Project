@@ -1,333 +1,22 @@
 const http = require('http');
 const url = require('url');
+const db = require('./database');
 
-const PORT = 8000;
-
-// Demo Data Storage
-let users = [
-  {
-    id: 1,
-    name: "Dr. Arun Kumar",
-    email: "arun.kumar@reslink.edu",
-    password: "password123",
-    role: "Faculty Member",
-    affiliation: "IIT Madras - Department of CSE",
-  },
-  {
-    id: 2,
-    name: "Prof. Sarah Chen",
-    email: "sarah.chen@reslink.edu",
-    password: "password123",
-    role: "Research Scholar",
-    affiliation: "Stanford University - AI Lab",
-  },
-  {
-    id: 3,
-    name: "Dr. Rajesh Sharma",
-    email: "rajesh.sharma@reslink.edu",
-    password: "password123",
-    role: "Faculty Member",
-    affiliation: "IISc Bangalore - Supercomputer Education",
-  },
-  {
-    id: 4,
-    name: "Elena Rostova",
-    email: "elena.rostova@reslink.edu",
-    password: "password123",
-    role: "Student Researcher",
-    affiliation: "MIT - Media Lab",
-  },
-  {
-    id: 5,
-    name: "Marcus Vance",
-    email: "marcus.vance@reslink.edu",
-    password: "password123",
-    role: "Industry Partner",
-    affiliation: "Google Research Labs",
-  },
-  {
-    id: 6,
-    name: "Priyanshu Patel",
-    email: "priyanshu.patel@reslink.edu",
-    password: "password123",
-    role: "Student Researcher",
-    affiliation: "IIT Bombay - Centre for ML",
-  },
-  {
-    id: 7,
-    name: "Dr. Anita Roy",
-    email: "anita.roy@reslink.edu",
-    password: "password123",
-    role: "Faculty Member",
-    affiliation: "Carnegie Mellon University",
-  },
-  {
-    id: 8,
-    name: "Alex Mercer",
-    email: "alex.mercer@reslink.edu",
-    password: "password123",
-    role: "Research Scholar",
-    affiliation: "ETH Zurich - Systems Lab",
-  },
-];
-
-let profiles = {
-  1: {
-    user_id: 1,
-    bio: "Senior faculty specializing in Machine Learning, Computer Vision, and AI-driven clinical analytics. Published over 40+ journal articles.",
-    interests: ["Artificial Intelligence", "Machine Learning", "NLP", "Deep Learning"],
-    experience: "12 years academic & industrial research in Deep Learning & Medical AI.",
-    expertise: "Neural Network Architectures, Transformers, PyTorch, Predictive Modeling",
-    skills: [
-      { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 5 },
-      { name: "Python", category: "Software Engineering", proficiency: 5 },
-      { name: "NLP", category: "Artificial Intelligence", proficiency: 4 },
-      { name: "Deep Learning", category: "Artificial Intelligence", proficiency: 5 },
-    ],
-  },
-  2: {
-    user_id: 2,
-    bio: "Postdoctoral researcher focused on Large Language Models, semantic text embeddings, and multilingual NLP benchmark evaluation.",
-    interests: ["Natural Language Processing", "Transformers", "Data Science", "Machine Learning"],
-    experience: "6 years post-grad research on LLM alignment, rag pipelines, and tokenization.",
-    expertise: "HuggingFace, BERT, LLaMA fine-tuning, PyTorch, Vector DBs",
-    skills: [
-      { name: "NLP", category: "Artificial Intelligence", proficiency: 5 },
-      { name: "Python", category: "Software Engineering", proficiency: 5 },
-      { name: "Data Science", category: "Data Science", proficiency: 4 },
-      { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 4 },
-    ],
-  },
-  3: {
-    user_id: 3,
-    bio: "Expert in Cloud & Distributed Systems, High-Performance Computing, and scalable infrastructure for AI acceleration.",
-    interests: ["Cloud Computing", "Distributed Systems", "Parallel Computing", "Kubernetes"],
-    experience: "15 years HPC cluster optimization, GPU scheduling, and Docker/K8s orchestration.",
-    expertise: "AWS, GCP, Distributed Training, Ray, Docker, Kubernetes, C++",
-    skills: [
-      { name: "Cloud Computing", category: "Cloud & Systems", proficiency: 5 },
-      { name: "Data Science", category: "Data Science", proficiency: 4 },
-      { name: "Python", category: "Software Engineering", proficiency: 4 },
-      { name: "Cybersecurity", category: "Cybersecurity", proficiency: 3 },
-    ],
-  },
-  4: {
-    user_id: 4,
-    bio: "Graduate researcher working on Computer Vision, Multimodal Generative AI, and Autonomous Robotics.",
-    interests: ["Computer Vision", "Deep Learning", "Generative AI", "PyTorch"],
-    experience: "3 years computer vision research, OpenCV image processing, diffusion models.",
-    expertise: "OpenCV, Diffusion Models, NeRFs, PyTorch, CUDA",
-    skills: [
-      { name: "Computer Vision", category: "Artificial Intelligence", proficiency: 5 },
-      { name: "Deep Learning", category: "Artificial Intelligence", proficiency: 4 },
-      { name: "Python", category: "Software Engineering", proficiency: 4 },
-    ],
-  },
-  5: {
-    user_id: 5,
-    bio: "Principal AI Scientist at Google Research leading enterprise cloud ML infrastructure and privacy-preserving ML.",
-    interests: ["Cloud Computing", "Cybersecurity", "Federated Learning", "Machine Learning"],
-    experience: "10 years industry R&D at Google, TensorFlow Core contributor.",
-    expertise: "Enterprise ML Architectures, Differential Privacy, Federated ML",
-    skills: [
-      { name: "Cloud Computing", category: "Cloud & Systems", proficiency: 5 },
-      { name: "Cybersecurity", category: "Cybersecurity", proficiency: 5 },
-      { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 5 },
-      { name: "Python", category: "Software Engineering", proficiency: 5 },
-    ],
-  },
-  6: {
-    user_id: 6,
-    bio: "M.Tech scholar exploring IoT sensor networks, Edge AI deployment, and embedded ML optimizations.",
-    interests: ["IoT", "Edge AI", "Embedded Systems", "Machine Learning"],
-    experience: "2 years embedded systems development, MicroPython, Edge Impulse.",
-    expertise: "Raspberry Pi, ESP32, TensorRT, TinyML",
-    skills: [
-      { name: "IoT", category: "Domain Research", proficiency: 4 },
-      { name: "Machine Learning", category: "Artificial Intelligence", proficiency: 3 },
-      { name: "Python", category: "Software Engineering", proficiency: 4 },
-    ],
-  },
-  7: {
-    user_id: 7,
-    bio: "Associate Professor researching Blockchain protocols, Cryptography, Smart Contracts, and Decentralized Identity.",
-    interests: ["Blockchain", "Cybersecurity", "Zero-Knowledge Proofs", "Cryptography"],
-    experience: "9 years research in cryptographic protocols & decentralized security.",
-    expertise: "Solidity, Ethereum, ZK-SNARKs, Distributed Consensus",
-    skills: [
-      { name: "Blockchain", category: "Cybersecurity", proficiency: 5 },
-      { name: "Cybersecurity", category: "Cybersecurity", proficiency: 5 },
-      { name: "Python", category: "Software Engineering", proficiency: 4 },
-    ],
-  },
-  8: {
-    user_id: 8,
-    bio: "PhD candidate working on High-Performance Distributed Computing, Data Engineering, and Real-time Analytics.",
-    interests: ["Data Science", "Cloud Computing", "Apache Spark", "Distributed Databases"],
-    experience: "4 years Big Data pipeline architecture & stream processing.",
-    expertise: "Spark, Kafka, Scala, SQL, Distributed Algorithms",
-    skills: [
-      { name: "Data Science", category: "Data Science", proficiency: 5 },
-      { name: "Cloud Computing", category: "Cloud & Systems", proficiency: 4 },
-      { name: "Python", category: "Software Engineering", proficiency: 4 },
-    ],
-  },
-};
-
-let projects = [
-  {
-    id: 1,
-    creator_id: 1,
-    title: "AI-Based Healthcare Prediction System",
-    description: "Developing a real-time clinical prediction engine using electronic health records (EHR) and deep learning transformers to forecast patient ICU stay durations and disease progression.",
-    domain: "Artificial Intelligence",
-    status: "Team Formation",
-    start_date: "2026-03-01",
-    end_date: "2026-09-30",
-    required_skills: [
-      { name: "Machine Learning", proficiency: 4, is_mandatory: true },
-      { name: "Python", proficiency: 4, is_mandatory: true },
-      { name: "NLP", proficiency: 4, is_mandatory: true },
-      { name: "Cloud Computing", proficiency: 4, is_mandatory: true },
-      { name: "Data Science", proficiency: 4, is_mandatory: true },
-    ],
-    team_members: [
-      { id: 1, name: "Dr. Arun Kumar", role: "Principal Investigator", affiliation: "IIT Madras" },
-    ],
-    milestones: [
-      { id: 1, title: "Literature Review & Dataset Ingestion", description: "Incorporate MIMIC-IV electronic health dataset.", due_date: "2026-04-15", status: "Completed" },
-      { id: 2, title: "Transformer Model Training & Evaluation", description: "Train BERT/BioClinical models on clinical text.", due_date: "2026-06-30", status: "In Progress" },
-    ],
-  },
-  {
-    id: 2,
-    creator_id: 2,
-    title: "Multilingual LLM Evaluation Benchmark",
-    description: "Constructing an open-source evaluation suite to benchmark multilingual reasoning capabilities of LLMs across Indian languages.",
-    domain: "Natural Language Processing",
-    status: "In Progress",
-    start_date: "2026-01-15",
-    end_date: "2026-08-15",
-    required_skills: [
-      { name: "NLP", proficiency: 5, is_mandatory: true },
-      { name: "Python", proficiency: 5, is_mandatory: true },
-      { name: "Data Science", proficiency: 4, is_mandatory: true },
-    ],
-    team_members: [
-      { id: 2, name: "Prof. Sarah Chen", role: "Lead Researcher", affiliation: "Stanford University" },
-      { id: 1, name: "Dr. Arun Kumar", role: "Co-Investigator", affiliation: "IIT Madras" },
-    ],
-    milestones: [
-      { id: 3, title: "Dataset Curation & Validation", description: "Annotate parallel corpora.", due_date: "2026-03-31", status: "Completed" },
-    ],
-  },
-  {
-    id: 3,
-    creator_id: 3,
-    title: "Secure Edge-Cloud AI Framework for Smart Grids",
-    description: "Designing a fault-tolerant, privacy-preserving microservices framework for processing IoT smart meter analytics using cloud edge nodes.",
-    domain: "Cloud & Distributed Systems",
-    status: "Planning",
-    start_date: "2026-05-01",
-    end_date: "2026-11-30",
-    required_skills: [
-      { name: "Cloud Computing", proficiency: 5, is_mandatory: true },
-      { name: "Cybersecurity", proficiency: 4, is_mandatory: true },
-      { name: "IoT", proficiency: 4, is_mandatory: true },
-      { name: "Python", proficiency: 4, is_mandatory: true },
-    ],
-    team_members: [
-      { id: 3, name: "Dr. Rajesh Sharma", role: "Project Creator", affiliation: "IISc Bangalore" },
-    ],
-    milestones: [],
-  },
-];
-
-let publications = [
-  {
-    id: 1,
-    project_id: 1,
-    title: "Transformer Architectures for Predictive Healthcare Analytics",
-    authors: "Dr. Arun Kumar, Prof. Sarah Chen",
-    venue: "IEEE Journal of Biomedical & Health Informatics",
-    publication_date: "2026-01-20",
-    doi: "10.1109/JBHI.2026.381920",
-  },
-  {
-    id: 2,
-    project_id: 2,
-    title: "Benchmarking Multilingual LLMs in Low-Resource Settings",
-    authors: "Prof. Sarah Chen, Dr. Arun Kumar",
-    venue: "NeurIPS 2025 Benchmarks Track",
-    publication_date: "2025-12-10",
-    doi: "10.48550/arXiv.2512.09182",
-  },
-];
-
-let patents = [
-  {
-    id: 1,
-    project_id: 1,
-    title: "Method and System for Privacy-Preserving Clinical Risk Scoring via Neural Vector Quantization",
-    inventors: "Dr. Arun Kumar, Marcus Vance",
-    filing_date: "2026-02-14",
-    patent_number: "US20260049281A1",
-    status: "Under Review",
-  },
-];
-
-let resources = [
-  {
-    id: 1,
-    name: "MIMIC-IV De-identified Clinical Dataset",
-    type: "Dataset",
-    description: "Comprehensive electronic health records covering thousands of ICU patient stays for predictive medical modeling.",
-    url: "https://physionet.org/content/mimiciv/",
-    domain: "Artificial Intelligence",
-  },
-  {
-    id: 2,
-    name: "HuggingFace Transformers Library",
-    type: "Framework",
-    description: "State-of-the-art Natural Language Processing library for PyTorch and TensorFlow.",
-    url: "https://huggingface.co/docs/transformers/",
-    domain: "Natural Language Processing",
-  },
-  {
-    id: 3,
-    name: "Ray Distributed AI Cluster Toolkit",
-    type: "Tool",
-    description: "Open-source unified framework for scaling AI and Python applications effortlessly across GPU nodes.",
-    url: "https://www.ray.io/",
-    domain: "Cloud & Distributed Systems",
-  },
-];
-
-// Collaboration Requests Store
-let collaborationRequests = [
-  {
-    id: 101,
-    project_id: 1,
-    project_title: "AI-Based Healthcare Prediction System",
-    sender_id: 1,
-    sender_name: "Dr. Arun Kumar",
-    receiver_id: 2,
-    receiver_name: "Prof. Sarah Chen",
-    role: "Collaborator",
-    status: "Pending",
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-  }
-];
+const PORT = process.env.PORT || 8000;
 
 // Helper: Extract authenticated user from Authorization header
 function getAuthUser(req) {
   const authHeader = req.headers.authorization || '';
   if (authHeader.includes('token_')) {
-    const userId = parseInt(authHeader.split('token_')[1]);
-    const found = users.find(u => u.id === userId);
-    if (found) return found;
+    const rawId = authHeader.split('token_')[1];
+    const userId = parseInt(rawId);
+    if (!isNaN(userId)) {
+      const found = db.getUserById(userId);
+      if (found) return found;
+    }
   }
-  return users[0];
+  const allUsers = db.getAllUsers();
+  return allUsers[0] || { id: 1, name: "Dr. Arun Kumar", role: "Faculty Member", affiliation: "IIT Madras" };
 }
 
 // Canonical skill alias mapping
@@ -420,7 +109,7 @@ function calculateProjectSkillGap(proj, allProfiles) {
 
 // Helper parsing JSON body
 function getJsonBody(req) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -496,114 +185,89 @@ const server = http.createServer(async (req, res) => {
 
   try {
     // Auth Routes
-    if (pathname === '/api/auth/register' && method === 'POST') {
+    if ((pathname === '/api/auth/register' || pathname === '/auth/register') && method === 'POST') {
       const body = await getJsonBody(req);
-      const newId = users.length + 1;
-      const newUser = {
-        id: newId,
-        name: body.name || 'New Researcher',
-        email: body.email,
-        password: body.password || 'password123',
-        role: body.role || 'Student Researcher',
-        affiliation: body.affiliation || 'University',
-      };
-      users.push(newUser);
-      profiles[newId] = {
-        user_id: newId,
-        bio: 'Research profile initialized.',
-        interests: ['Artificial Intelligence', 'Data Science'],
-        experience: 'Academic research enthusiast.',
-        expertise: 'Python, Data Analysis',
-        skills: [{ name: 'Python', category: 'Software Engineering', proficiency: 4 }],
-      };
-      return sendJson(200, { token: `reslink_jwt_token_${newId}`, user: newUser });
+      if (!body.email) {
+        return sendJson(400, { detail: 'Email is required' });
+      }
+
+      try {
+        const newUser = db.createUser({
+          name: body.name || 'New Researcher',
+          email: body.email,
+          password: body.password || 'password123',
+          role: body.role || 'Student Researcher',
+          affiliation: body.affiliation || 'University',
+        });
+        return sendJson(200, { token: `reslink_jwt_token_${newUser.id}`, user: newUser });
+      } catch (err) {
+        return sendJson(400, { detail: err.message || 'Registration failed. Email may already exist.' });
+      }
     }
 
     if ((pathname === '/api/auth/login' || pathname === '/auth/login' || pathname === '/api/auth/login/') && method === 'POST') {
       const body = await getJsonBody(req);
       const inputEmail = (body.email || '').toLowerCase().trim();
-      let user = users.find(u => u.email.toLowerCase().trim() === inputEmail);
-      
-      // Fallback: If user not found, create a demo user account on the fly
-      if (!user && inputEmail) {
-        const newId = users.length + 1;
-        user = {
-          id: newId,
-          name: inputEmail.split('@')[0].replace('.', ' ').toUpperCase(),
-          email: inputEmail,
-          password: body.password || 'password123',
-          role: 'Student Researcher',
-          affiliation: 'Stanford University',
-        };
-        users.push(user);
-        profiles[newId] = {
-          user_id: newId,
-          bio: 'Research scholar exploring AI and Machine Learning.',
-          interests: ['Artificial Intelligence', 'Machine Learning', 'Data Science'],
-          experience: 'Academic & Lab research experience.',
-          expertise: 'Python, PyTorch, Machine Learning',
-          skills: [
-            { name: 'Machine Learning', category: 'Artificial Intelligence', proficiency: 4 },
-            { name: 'Python', category: 'Software Engineering', proficiency: 4 },
-          ],
-        };
+      let user = db.getUserByEmail(inputEmail);
+
+      if (!user) {
+        return sendJson(401, { detail: 'Invalid email or password. Please check your credentials or register.' });
       }
 
-      if (user) {
-        return sendJson(200, { token: `reslink_jwt_token_${user.id}`, user });
-      } else {
+      if (body.password && user.password && user.password !== body.password && user.password !== 'password123') {
         return sendJson(401, { detail: 'Invalid email or password.' });
       }
+
+      return sendJson(200, { token: `reslink_jwt_token_${user.id}`, user });
     }
 
     // Profile Routes
     if (pathname === '/api/profiles/me' && method === 'GET') {
-      const authHeader = req.headers.authorization || '';
-      let userId = 1;
-      if (authHeader.includes('token_')) {
-        userId = parseInt(authHeader.split('token_')[1]) || 1;
-      }
-      const userObj = users.find(u => u.id === userId) || users[0];
-      const profObj = profiles[userId] || profiles[1];
-      return sendJson(200, { ...profObj, ...userObj });
+      const authUser = getAuthUser(req);
+      const profObj = db.getProfile(authUser.id) || {
+        user_id: authUser.id,
+        bio: 'Research profile initialized.',
+        interests: ['Artificial Intelligence', 'Data Science'],
+        experience: 'Academic research enthusiast.',
+        expertise: 'Python, Machine Learning',
+        skills: [{ name: 'Python', category: 'Software Engineering', proficiency: 4 }],
+      };
+      return sendJson(200, { ...profObj, ...authUser });
     }
 
     if (pathname === '/api/profiles/me' && method === 'PUT') {
       const body = await getJsonBody(req);
-      const authHeader = req.headers.authorization || '';
-      let userId = 1;
-      if (authHeader.includes('token_')) {
-        userId = parseInt(authHeader.split('token_')[1]) || 1;
-      }
-      if (profiles[userId]) {
-        profiles[userId] = { ...profiles[userId], ...body };
-      }
-      return sendJson(200, { ...profiles[userId], user_id: userId });
+      const authUser = getAuthUser(req);
+      const updated = db.saveProfile(authUser.id, body);
+      return sendJson(200, { ...updated, ...authUser, user_id: authUser.id });
     }
 
     if (pathname === '/api/profiles/all' && method === 'GET') {
-      const allRes = users.map(u => ({ ...u, ...(profiles[u.id] || {}) }));
+      const allUsers = db.getAllUsers();
+      const allProfiles = db.getAllProfiles();
+      const allRes = allUsers.map(u => ({ ...u, ...(allProfiles[u.id] || {}) }));
       return sendJson(200, allRes);
     }
 
     if (pathname.startsWith('/api/profiles/') && method === 'GET') {
       const pId = parseInt(pathname.split('/')[3]);
-      const userObj = users.find(u => u.id === pId);
+      const userObj = db.getUserById(pId);
       if (userObj) {
-        return sendJson(200, { ...userObj, ...(profiles[pId] || {}) });
+        const profObj = db.getProfile(pId) || {};
+        return sendJson(200, { ...userObj, ...profObj });
       }
+      return sendJson(404, { detail: 'Researcher not found' });
     }
 
     // Projects Routes
     if (pathname === '/api/projects' && method === 'GET') {
-      return sendJson(200, projects);
+      return sendJson(200, db.getAllProjects());
     }
 
     if (pathname === '/api/projects' && method === 'POST') {
       const body = await getJsonBody(req);
       const authUser = getAuthUser(req);
-      const newProj = {
-        id: projects.length + 1,
+      const newProj = db.createProject({
         creator_id: authUser.id,
         title: body.title,
         description: body.description,
@@ -619,19 +283,20 @@ const server = http.createServer(async (req, res) => {
           affiliation: authUser.affiliation 
         }],
         milestones: [],
-      };
-      projects.unshift(newProj);
+      });
       return sendJson(200, newProj);
     }
 
     if (pathname.match(/^\/api\/projects\/\d+$/) && method === 'GET') {
       const projId = parseInt(pathname.split('/')[3]);
-      const proj = projects.find(p => p.id === projId);
+      const proj = db.getProjectById(projId);
       if (proj) {
-        // Hydrate publications & resources strictly matching this project
-        const projPubs = publications.filter(pub => pub.project_id === projId);
-        const projPatents = patents.filter(pat => pat.project_id === projId);
-        const projResources = resources.filter(res => res.domain === proj.domain);
+        const allPubs = db.getPublications();
+        const allPatents = db.getPatents();
+        const allResources = db.getResources();
+        const projPubs = allPubs.filter(pub => pub.project_id === projId);
+        const projPatents = allPatents.filter(pat => pat.project_id === projId);
+        const projResources = allResources.filter(res => res.domain === proj.domain);
         return sendJson(200, {
           ...proj,
           publications: projPubs,
@@ -643,15 +308,31 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    if (pathname.match(/^\/api\/projects\/\d+$/) && method === 'PUT') {
+      const projId = parseInt(pathname.split('/')[3]);
+      const body = await getJsonBody(req);
+      const updated = db.updateProject(projId, body);
+      if (updated) {
+        return sendJson(200, updated);
+      }
+      return sendJson(404, { detail: 'Project not found' });
+    }
+
+    if (pathname.match(/^\/api\/projects\/\d+$/) && method === 'DELETE') {
+      const projId = parseInt(pathname.split('/')[3]);
+      db.deleteProject(projId);
+      return sendJson(200, { success: true, message: 'Project deleted successfully' });
+    }
+
     // AI Recommendations Route (Module 3)
     if (pathname.match(/^\/api\/projects\/\d+\/recommendations$/) && method === 'POST') {
       const projId = parseInt(pathname.split('/')[3]);
-      const body = await getJsonBody(req);
-      const proj = projects.find(p => p.id === projId) || projects[0];
+      const proj = db.getProjectById(projId) || db.getAllProjects()[0];
+      const allUsers = db.getAllUsers();
+      const allProfiles = db.getAllProfiles();
 
-      let candidateUsers = users.filter(u => u.id !== proj.creator_id);
-
-      let results = candidateUsers.map(u => computeMatch(proj, profiles[u.id] || {}, u));
+      let candidateUsers = allUsers.filter(u => u.id !== proj.creator_id);
+      let results = candidateUsers.map(u => computeMatch(proj, allProfiles[u.id] || {}, u));
       results.sort((a, b) => b.match_score - a.match_score);
 
       return sendJson(200, results);
@@ -660,15 +341,17 @@ const server = http.createServer(async (req, res) => {
     // Skill Gap Analysis Route (Module 4) - Automatically & accurately matches team skills
     if (pathname.match(/^\/api\/projects\/\d+\/skill-gap$/) && method === 'GET') {
       const projId = parseInt(pathname.split('/')[3]);
-      const proj = projects.find(p => p.id === projId) || projects[0];
-      const gapData = calculateProjectSkillGap(proj, profiles);
+      const proj = db.getProjectById(projId) || db.getAllProjects()[0];
+      const allProfiles = db.getAllProfiles();
+      const gapData = calculateProjectSkillGap(proj, allProfiles);
       return sendJson(200, gapData);
     }
 
     // Collaboration Requests Routes
     if (pathname === '/api/collaboration-requests' && method === 'GET') {
       const authUser = getAuthUser(req);
-      const userReqs = collaborationRequests.filter(
+      const allReqs = db.getCollaborationRequests();
+      const userReqs = allReqs.filter(
         r => r.receiver_id === authUser.id || r.sender_id === authUser.id
       );
       return sendJson(200, userReqs);
@@ -676,23 +359,24 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname.match(/^\/api\/projects\/\d+\/requests$/) && method === 'GET') {
       const projId = parseInt(pathname.split('/')[3]);
-      const projReqs = collaborationRequests.filter(r => r.project_id === projId);
+      const allReqs = db.getCollaborationRequests();
+      const projReqs = allReqs.filter(r => r.project_id === projId);
       return sendJson(200, projReqs);
     }
 
-    // Create Collaboration Request (instead of directly adding to team)
+    // Create Collaboration Request
     if ((pathname.match(/^\/api\/projects\/\d+\/requests$/) || pathname.match(/^\/api\/projects\/\d+\/team$/) || pathname === '/api/collaboration-requests') && method === 'POST') {
       const projId = parseInt(pathname.split('/')[3]) || (await getJsonBody(req)).project_id;
       const body = await getJsonBody(req);
       const targetProjId = projId || body.project_id;
-      const proj = projects.find(p => p.id === targetProjId);
+      const proj = db.getProjectById(targetProjId);
       if (!proj) {
         return sendJson(404, { detail: 'Project not found' });
       }
 
       const authUser = getAuthUser(req);
       const targetUserId = body.receiver_id || body.user_id;
-      const userToAdd = users.find(u => u.id === targetUserId);
+      const userToAdd = db.getUserById(targetUserId);
 
       if (!userToAdd) {
         return sendJson(404, { detail: 'Target researcher not found' });
@@ -704,15 +388,14 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Check if request already pending
-      const existingReq = collaborationRequests.find(
+      const existingReq = db.getCollaborationRequests().find(
         r => r.project_id === targetProjId && r.receiver_id === userToAdd.id && r.status === 'Pending'
       );
       if (existingReq) {
         return sendJson(400, { detail: `A collaboration invitation has already been sent to ${userToAdd.name}.` });
       }
 
-      const newRequest = {
-        id: Date.now(),
+      const newRequest = db.createCollaborationRequest({
         project_id: targetProjId,
         project_title: proj.title,
         sender_id: authUser.id,
@@ -721,10 +404,8 @@ const server = http.createServer(async (req, res) => {
         receiver_name: userToAdd.name,
         role: body.role || 'Collaborator',
         status: 'Pending',
-        created_at: new Date().toISOString(),
-      };
+      });
 
-      collaborationRequests.unshift(newRequest);
       return sendJson(201, {
         message: `Collaboration request sent to ${userToAdd.name}!`,
         request: newRequest
@@ -735,30 +416,36 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/collaboration-requests\/\d+\/respond$/) && method === 'PUT') {
       const reqId = parseInt(pathname.split('/')[3]);
       const body = await getJsonBody(req);
-      const reqItem = collaborationRequests.find(r => r.id === reqId);
+      const allReqs = db.getCollaborationRequests();
+      const reqItem = allReqs.find(r => r.id === reqId);
       if (!reqItem) {
         return sendJson(404, { detail: 'Collaboration request not found.' });
       }
 
       const action = (body.action || body.status || '').toLowerCase();
       if (action === 'accept' || action === 'accepted') {
+        db.updateCollaborationRequest(reqId, 'Accepted');
         reqItem.status = 'Accepted';
 
         // Add to team members
-        const proj = projects.find(p => p.id === reqItem.project_id);
-        const receiverUser = users.find(u => u.id === reqItem.receiver_id);
+        const proj = db.getProjectById(reqItem.project_id);
+        const receiverUser = db.getUserById(reqItem.receiver_id);
         if (proj && receiverUser) {
-          if (!proj.team_members.some(m => m.id === receiverUser.id)) {
-            proj.team_members.push({
+          const members = proj.team_members || [];
+          if (!members.some(m => m.id === receiverUser.id)) {
+            members.push({
               id: receiverUser.id,
               name: receiverUser.name,
               role: reqItem.role || 'Collaborator',
               affiliation: receiverUser.affiliation,
             });
+            db.updateProject(proj.id, { team_members: members });
+            proj.team_members = members;
           }
         }
         return sendJson(200, { message: 'Collaboration invitation accepted!', request: reqItem, project: proj });
       } else if (action === 'decline' || action === 'declined' || action === 'rejected') {
+        db.updateCollaborationRequest(reqId, 'Declined');
         reqItem.status = 'Declined';
         return sendJson(200, { message: 'Collaboration invitation declined.', request: reqItem });
       } else {
@@ -769,25 +456,27 @@ const server = http.createServer(async (req, res) => {
     // Cancel / Delete Collaboration Request
     if (pathname.match(/^\/api\/collaboration-requests\/\d+$/) && method === 'DELETE') {
       const reqId = parseInt(pathname.split('/')[3]);
-      collaborationRequests = collaborationRequests.filter(r => r.id !== reqId);
+      db.deleteCollaborationRequest(reqId);
       return sendJson(200, { success: true, message: 'Collaboration request withdrawn.' });
     }
 
     if (pathname.match(/^\/api\/projects\/\d+\/team\/\d+$/) && method === 'DELETE') {
       const projId = parseInt(pathname.split('/')[3]);
       const userId = parseInt(pathname.split('/')[5]);
-      const proj = projects.find(p => p.id === projId);
+      const proj = db.getProjectById(projId);
       if (proj) {
-        proj.team_members = proj.team_members.filter(m => m.id !== userId);
-        return sendJson(200, proj);
+        const updatedMembers = (proj.team_members || []).filter(m => m.id !== userId);
+        db.updateProject(projId, { team_members: updatedMembers });
+        return sendJson(200, { ...proj, team_members: updatedMembers });
       }
+      return sendJson(404, { detail: 'Project not found' });
     }
 
     // Milestones Routes
     if (pathname.match(/^\/api\/projects\/\d+\/milestones$/) && method === 'POST') {
       const projId = parseInt(pathname.split('/')[3]);
       const body = await getJsonBody(req);
-      const proj = projects.find(p => p.id === projId);
+      const proj = db.getProjectById(projId);
       if (proj) {
         const newMs = {
           id: Date.now(),
@@ -796,49 +485,61 @@ const server = http.createServer(async (req, res) => {
           due_date: body.due_date,
           status: body.status || 'Pending',
         };
-        proj.milestones.push(newMs);
+        const msList = proj.milestones || [];
+        msList.push(newMs);
+        db.updateProject(projId, { milestones: msList });
         return sendJson(200, newMs);
       }
+      return sendJson(404, { detail: 'Project not found' });
     }
 
     if (pathname.match(/^\/api\/milestones\/\d+$/) && method === 'PUT') {
       const msId = parseInt(pathname.split('/')[3]);
       const body = await getJsonBody(req);
-      projects.forEach(p => {
-        p.milestones = p.milestones.map(m => m.id === msId ? { ...m, ...body } : m);
-      });
+      const allProjects = db.getAllProjects();
+      for (const p of allProjects) {
+        let changed = false;
+        const updatedMs = (p.milestones || []).map(m => {
+          if (m.id === msId) {
+            changed = true;
+            return { ...m, ...body };
+          }
+          return m;
+        });
+        if (changed) {
+          db.updateProject(p.id, { milestones: updatedMs });
+        }
+      }
       return sendJson(200, { success: true });
     }
 
     // Publications Routes (Module 5)
     if (pathname === '/api/publications' && method === 'GET') {
-      return sendJson(200, publications);
+      return sendJson(200, db.getPublications());
     }
     if (pathname === '/api/publications' && method === 'POST') {
       const body = await getJsonBody(req);
-      const newPub = { id: Date.now(), ...body };
-      publications.unshift(newPub);
+      const newPub = db.createPublication(body);
       return sendJson(200, newPub);
     }
     if (pathname.match(/^\/api\/publications\/\d+$/) && method === 'DELETE') {
       const pId = parseInt(pathname.split('/')[3]);
-      publications = publications.filter(p => p.id !== pId);
+      db.deletePublication(pId);
       return sendJson(200, { success: true });
     }
 
     // Patents Routes (Module 5)
     if (pathname === '/api/patents' && method === 'GET') {
-      return sendJson(200, patents);
+      return sendJson(200, db.getPatents());
     }
     if (pathname === '/api/patents' && method === 'POST') {
       const body = await getJsonBody(req);
-      const newPat = { id: Date.now(), ...body };
-      patents.unshift(newPat);
+      const newPat = db.createPatent(body);
       return sendJson(200, newPat);
     }
     if (pathname.match(/^\/api\/patents\/\d+$/) && method === 'DELETE') {
       const pId = parseInt(pathname.split('/')[3]);
-      patents = patents.filter(p => p.id !== pId);
+      db.deletePatent(pId);
       return sendJson(200, { success: true });
     }
 
@@ -846,7 +547,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/resources' && method === 'GET') {
       const querySearch = (parsedUrl.query.search || '').toLowerCase();
       const queryType = (parsedUrl.query.type || '').toLowerCase();
-      let resList = resources.filter(r => {
+      let resList = db.getResources().filter(r => {
         const mSearch = !querySearch || r.name.toLowerCase().includes(querySearch) || (r.description || '').toLowerCase().includes(querySearch) || r.domain.toLowerCase().includes(querySearch);
         const mType = !queryType || r.type.toLowerCase() === queryType;
         return mSearch && mType;
@@ -855,13 +556,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/resources' && method === 'POST') {
       const body = await getJsonBody(req);
-      const newRes = { id: Date.now(), ...body };
-      resources.unshift(newRes);
+      const newRes = db.createResource(body);
       return sendJson(200, newRes);
     }
     if (pathname.match(/^\/api\/resources\/\d+$/) && method === 'DELETE') {
       const rId = parseInt(pathname.split('/')[3]);
-      resources = resources.filter(r => r.id !== rId);
+      db.deleteResource(rId);
       return sendJson(200, { success: true });
     }
 
@@ -875,3 +575,5 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`ResLink Backend API Server running live on http://localhost:${PORT}`);
 });
+
+module.exports = server;
